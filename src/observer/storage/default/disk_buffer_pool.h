@@ -21,7 +21,8 @@ See the Mulan PSL v2 for more details. */
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
-
+#include <unordered_map>
+#include <list>
 #include <vector>
 
 #include "rc.h"
@@ -97,11 +98,11 @@ public:
   }
 
   Frame *alloc() {
-    return nullptr; // TODO for test
+    return nullptr;
   }
 
   Frame *get(int file_desc, PageNum page_num) {
-    return nullptr; // TODO for test
+    return nullptr;
   }
 
   Frame *getFrame() { return frame; }
@@ -110,7 +111,7 @@ public:
 
 public:
   int size;
-  Frame * frame = nullptr;
+  Frame *frame = nullptr;
   bool *allocated = nullptr;
 };
 

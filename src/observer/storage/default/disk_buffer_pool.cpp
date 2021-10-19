@@ -203,6 +203,9 @@ RC DiskBufferPool::get_this_page(int file_id, PageNum page_num, BPPageHandle *pa
       return RC::SUCCESS;
     }
   }
+  /** if --> this page has been load
+   *  else --> this page has not been load
+   * */
 
   // Allocate one page and load the data into this page
   if ((tmp = allocate_block(&(page_handle->frame))) != RC::SUCCESS) {

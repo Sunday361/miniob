@@ -71,6 +71,22 @@ RC Db::create_table(const char *table_name, int attribute_count, const AttrInfo 
   return RC::SUCCESS;
 }
 
+RC Db::drop_table(const char *table_name) {
+  if (opened_tables_.count(table_name) == 0) {
+    return RC::SCHEMA_TABLE_NOT_EXIST;
+  }
+  std::string table_file_path = table_meta_file(path_.c_str(), table_name);
+  std::string data_file = path_ + "/" + table_name + TABLE_DATA_SUFFIX;
+
+  int ret = unlink(table_file_path.c_str());
+  ret = unlink(data_file.c_str());
+  if (ret != 0) {
+    return RC::SCHEMA_TABLE_NAME_ILLEGAL;
+  }
+  opened_tables_.erase(opened_tables_.find(table_name));
+  return RC::SUCCESS;
+}
+
 Table *Db::find_table(const char *table_name) const {
   std::unordered_map<std::string, Table *>::const_iterator iter = opened_tables_.find(table_name);
   if (iter != opened_tables_.end()) {

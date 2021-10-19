@@ -161,14 +161,14 @@ void DefaultStorageStage::handle_event(StageEvent *event) {
   char response[256];
   switch (sql->flag)
   {
-  case SCF_INSERT: { // insert into
+    case SCF_INSERT: { // insert into
       const Inserts &inserts = sql->sstr.insertion;
       const char *table_name = inserts.relation_name;
       rc = handler_->insert_record(current_trx, current_db, table_name, inserts.value_num, inserts.values);
       snprintf(response, sizeof(response), "%s\n", rc == RC::SUCCESS ? "SUCCESS" : "FAILURE");
     }
-    break;
-  case SCF_UPDATE: {
+      break;
+    case SCF_UPDATE: {
       const Updates &updates = sql->sstr.update;
       const char *table_name = updates.relation_name;
       const char *field_name = updates.attribute_name;
@@ -177,31 +177,31 @@ void DefaultStorageStage::handle_event(StageEvent *event) {
                                    updates.condition_num, updates.conditions, &updated_count);
       snprintf(response, sizeof(response), "%s\n", rc == RC::SUCCESS ? "SUCCESS" : "FAILURE");
     }
-    break;
-  case SCF_DELETE: {
+      break;
+    case SCF_DELETE: {
       const Deletes &deletes = sql->sstr.deletion;
       const char *table_name = deletes.relation_name;
       int deleted_count = 0;
       rc = handler_->delete_record(current_trx, current_db, table_name, deletes.condition_num, deletes.conditions, &deleted_count);
       snprintf(response, sizeof(response), "%s\n", rc == RC::SUCCESS ? "SUCCESS" : "FAILURE");
     }
-    break;
-  case SCF_CREATE_TABLE: { // create table
+      break;
+    case SCF_CREATE_TABLE: { // create table
       const CreateTable &create_table = sql->sstr.create_table;
-      rc = handler_->create_table(current_db, create_table.relation_name, 
-              create_table.attribute_count, create_table.attributes);
+      rc = handler_->create_table(current_db, create_table.relation_name,
+                                  create_table.attribute_count, create_table.attributes);
       snprintf(response, sizeof(response), "%s\n", rc == RC::SUCCESS ? "SUCCESS" : "FAILURE");
     }
-    break;
-  case SCF_CREATE_INDEX: {
+      break;
+    case SCF_CREATE_INDEX: {
       const CreateIndex &create_index = sql->sstr.create_index;
-      rc = handler_->create_index(current_trx, current_db, create_index.relation_name, 
+      rc = handler_->create_index(current_trx, current_db, create_index.relation_name,
                                   create_index.index_name, create_index.attribute_name);
       snprintf(response, sizeof(response), "%s\n", rc == RC::SUCCESS ? "SUCCESS" : "FAILURE");
     }
-    break;
+      break;
 
-  case SCF_SHOW_TABLES: {
+    case SCF_SHOW_TABLES: {
       Db *db = handler_->find_db(current_db);
       if (nullptr == db) {
         snprintf(response, sizeof(response), "No such database: %s\n", current_db);
@@ -219,8 +219,8 @@ void DefaultStorageStage::handle_event(StageEvent *event) {
         }
       }
     }
-    break;
-  case SCF_DESC_TABLE: {
+      break;
+    case SCF_DESC_TABLE: {
       const char *table_name = sql->sstr.desc_table.relation_name;
       Table *table = handler_->find_table(current_db, table_name);
       std::stringstream ss;
@@ -231,9 +231,9 @@ void DefaultStorageStage::handle_event(StageEvent *event) {
       }
       snprintf(response, sizeof(response), "%s", ss.str().c_str());
     }
-    break;
+      break;
 
-  case SCF_LOAD_DATA: {
+    case SCF_LOAD_DATA: {
       /*
         从文件导入数据，如果做性能测试，需要保持这些代码可以正常工作
         load data infile `your/file/path` into table `table-name`;
@@ -243,8 +243,15 @@ void DefaultStorageStage::handle_event(StageEvent *event) {
       std::string result = load_data(current_db, table_name, file_name);
       snprintf(response, sizeof(response), "%s", result.c_str());
     }
-    break;
-  default:
+      break;
+
+    case SCF_DROP_TABLE:{
+      const DropTable &drop_table = sql->sstr.drop_table;
+      rc = handler_->drop_table(current_db, drop_table.relation_name);
+      snprintf(response, sizeof(response), "%s\n", rc == RC::SUCCESS ? "SUCCESS" : "FAILURE");
+    }
+      break;
+    default:
       snprintf(response, sizeof(response), "Unsupported sql: %d\n", sql->flag);
       break;
   }
