@@ -519,10 +519,6 @@ RC Table::create_index(Trx *trx, const char *index_name, const char *attribute_n
   return rc;
 }
 
-RC Table::update_record(Trx *trx, const char *attribute_name, const Value *value, int condition_num, const Condition conditions[], int *updated_count) {
-  return RC::GENERIC_ERROR;
-}
-
 class RecordDeleter {
 public:
   RecordDeleter(Table &table, Trx *trx) : table_(table), trx_(trx) {
@@ -577,6 +573,84 @@ RC Table::delete_record(Trx *trx, Record *record) {
   return rc;
 }
 
+class RecordUpdater {
+ public:
+  RecordUpdater(Table &table, Trx *trx, const char *attribute_name, const Value *value)
+      : table_(table), trx_(trx), attribute_name_(attribute_name), value_(value) {
+  }
+
+  RC update_record(Record *record) {
+    RC rc = RC::SUCCESS;
+    rc = table_.update_record(trx_, record, attribute_name_, value_);
+    if (rc == RC::SUCCESS) {
+      updated_count_++;
+    }
+    return rc;
+  }
+
+  int updated_count() const {
+    return updated_count_;
+  }
+
+ private:
+  Table & table_;
+  Trx *trx_;
+  int updated_count_ = 0;
+  const char *attribute_name_;
+  const Value *value_;
+};
+
+static RC record_reader_update_adapter(Record *record, void *context) {
+  RecordUpdater &record_updater = *(RecordUpdater *)context;
+  return record_updater.update_record(record);
+}
+
+RC Table::update_record(Trx *trx, const char *attribute_name, const Value *value, ConditionFilter* filter, int *updated_count) {
+  RecordUpdater updater(*this, trx, attribute_name, value);
+  RC rc = scan_record(trx, filter, -1, &updater, record_reader_update_adapter);
+  if (updated_count != nullptr) {
+    *updated_count = updater.updated_count();
+  }
+
+  return rc;
+}
+
+RC Table::update_record(Trx *trx, Record *record, const char *attribute_name, const Value *value) {
+  RC rc = RC::SUCCESS;
+  auto meta = table_meta_.field(attribute_name);
+  if (meta == nullptr) {
+    return RC::SCHEMA_FIELD_NOT_EXIST;
+  }
+
+  auto indexMeta = table_meta_.find_index_by_field(attribute_name);
+  if (nullptr != indexMeta) {
+    std::string indexName = indexMeta->name();
+    Index* index = find_index(indexName.c_str());
+
+    rc = index->delete_entry(record->data, &record->rid);
+    if (rc != RC::SUCCESS) {
+      LOG_ERROR("Failed to delete indexes of record(rid=%d.%d). rc=%d:%s",
+                record->rid.page_num, record->rid.slot_num, rc, strrc(rc));// panic?
+    }
+    memmove(record->data + meta->offset(), value->data, meta->len());
+    rc = index->insert_entry(record->data, &record->rid);
+    if (rc != RC::SUCCESS) {
+      LOG_ERROR("Failed to insert indexes of record(rid=%d.%d). rc=%d:%s",
+                record->rid.page_num, record->rid.slot_num, rc, strrc(rc));// panic?
+    }
+  }else {
+    memmove(record->data + meta->offset(), value->data, meta->len());
+  }
+
+  if (trx != nullptr) {
+    rc = trx->update_record(this, record);
+  } else {
+    // need to add update index
+    rc = record_handler_->update_record(record);
+  }
+  return rc;
+}
+
 RC Table::commit_delete(Trx *trx, const RID &rid) {
   RC rc = RC::SUCCESS;
   Record record;
@@ -591,6 +665,27 @@ RC Table::commit_delete(Trx *trx, const RID &rid) {
   }
 
   rc = record_handler_->delete_record(&rid);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+
+  return rc;
+}
+
+RC Table::commit_update(Trx *trx, const RID &rid) {
+  RC rc = RC::SUCCESS;
+  Record record;
+  rc = record_handler_->get_record(&rid, &record);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+  // need to add update index
+  if (rc != RC::SUCCESS) {
+    LOG_ERROR("Failed to update indexes of record(rid=%d.%d). rc=%d:%s",
+              rid.page_num, rid.slot_num, rc, strrc(rc));// panic?
+  }
+
+  rc = record_handler_->update_record(&record);
   if (rc != RC::SUCCESS) {
     return rc;
   }

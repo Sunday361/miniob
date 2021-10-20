@@ -177,8 +177,12 @@ RC DefaultHandler::update_record(Trx *trx, const char *dbname, const char *relat
   if (nullptr == table) {
     return RC::SCHEMA_TABLE_NOT_EXIST;
   }
-
-  return table->update_record(trx, attribute_name, value, condition_num, conditions, updated_count);
+  CompositeConditionFilter conditionFilter;
+  RC rc = conditionFilter.init(*table, conditions, condition_num);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+  return table->update_record(trx, attribute_name, value, &conditionFilter, updated_count);
 }
 
 Db *DefaultHandler::find_db(const char *dbname) const {

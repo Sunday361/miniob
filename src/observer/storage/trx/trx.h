@@ -49,10 +49,24 @@ public:
     return slot_num_;
   }
 
+  void setUpdate(char* data, char* attributeName, int len, int offset) {
+    undo_.data = data;
+    undo_.attributeName = attributeName;
+    undo_.len = len;
+    undo_.offset = offset;
+  }
 private:
   Type type_;
   PageNum  page_num_;
   SlotNum  slot_num_;
+  struct UndoRecord {
+    char* attributeName;
+    char* data;
+    int len;
+    int offset;
+  };
+
+  UndoRecord undo_;
 };
 class OperationHasher {
 public:
@@ -88,6 +102,7 @@ public:
 public:
   RC insert_record(Table *table, Record *record);
   RC delete_record(Table *table, Record *record);
+  RC update_record(Table *table, Record *record);
 
   RC commit();
   RC rollback();

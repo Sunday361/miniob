@@ -75,14 +75,22 @@ RC Db::drop_table(const char *table_name) {
   if (opened_tables_.count(table_name) == 0) {
     return RC::SCHEMA_TABLE_NOT_EXIST;
   }
+  auto table = opened_tables_[table_name];
+  int indexSize = table->table_meta().index_num();
+  std::string index_path = path_ + "/";
+  for (int i = 0; i < indexSize; i++) {
+    auto indexMeta = table->table_meta().index(i);
+    auto indexName = index_path + table_name + '-' + indexMeta->name() + TABLE_INDEX_SUFFIX;
+    LOG_INFO("drop table-index success. index name=%s", indexName.c_str());
+    unlink(indexName.c_str());
+  }
+
   std::string table_file_path = table_meta_file(path_.c_str(), table_name);
   std::string data_file = path_ + "/" + table_name + TABLE_DATA_SUFFIX;
 
-  int ret = unlink(table_file_path.c_str());
-  ret = unlink(data_file.c_str());
-  if (ret != 0) {
-    return RC::SCHEMA_TABLE_NAME_ILLEGAL;
-  }
+  unlink(table_file_path.c_str());
+  unlink(data_file.c_str());
+
   opened_tables_.erase(opened_tables_.find(table_name));
   return RC::SUCCESS;
 }
