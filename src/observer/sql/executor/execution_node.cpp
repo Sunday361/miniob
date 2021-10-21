@@ -26,8 +26,7 @@ SelectExeNode::~SelectExeNode() {
   condition_filters_.clear();
 }
 
-RC
-SelectExeNode::init(Trx *trx, Table *table, TupleSchema &&tuple_schema, std::vector<DefaultConditionFilter *> &&condition_filters) {
+RC SelectExeNode::init(Trx *trx, Table *table, TupleSchema &&tuple_schema, std::vector<DefaultConditionFilter *> &&condition_filters) {
   trx_ = trx;
   table_ = table;
   tuple_schema_ = tuple_schema;
@@ -48,3 +47,51 @@ RC SelectExeNode::execute(TupleSet &tuple_set) {
   TupleRecordConverter converter(table_, tuple_set);
   return table_->scan_record(trx_, &condition_filter, -1, (void *)&converter, record_reader);
 }
+
+AggregateExeNode::AggregateExeNode(): table_(nullptr) {
+
+}
+
+AggregateExeNode::~AggregateExeNode() noexcept {
+
+}
+
+RC AggregateExeNode::init(Trx *trx, Table *table,
+                          TupleSchema &&tupleSchema, std::vector<AggType>& aggTypes) {
+  trx_ = trx;
+  table_ = table;
+  tupleSchema_ = tupleSchema;
+  aggTypes_ = aggTypes;
+  values_.resize(aggTypes.size());
+  return RC::SUCCESS;
+}
+
+RC AggregateExeNode::execute(TupleSet &tuple_set) {
+  tuple_set.clear();
+  tuple_set.set_schema(tupleSchema_);
+  TupleRecordConverter converter(table_, tuple_set);
+  RC rc = table_->scan_record(trx_, nullptr, -1, (void *)&converter, record_reader);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+  for (auto& tuple : tuple_set.tuples()) {
+    for (int i = 0; i < aggTypes_.size(); i++) {
+      switch (aggTypes_[i]) {
+        case AVG_AGG:
+          values_[i] += tuple.get(i); break;
+        case MAX_AGG:
+          values_[i] += tuple.get(i); break;
+        case MIN_AGG:
+          values_[i] += tuple.get(i); break;
+        case COUNT_AGG:
+          values_[i] += tuple.get(i); break;
+        case NO_AGG:
+          return RC::INVALID_ARGUMENT;
+      }
+    }
+  }
+  return RC::SUCCESS;
+}
+
+
+

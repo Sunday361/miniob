@@ -30,6 +30,20 @@ typedef struct {
 } RelAttr;
 
 typedef enum {
+  COUNT_AGG,
+  MAX_AGG,
+  MIN_AGG,
+  AVG_AGG,
+  NO_AGG
+}AggType;
+
+typedef struct {
+  char *relation_name;   // relation name (may be NULL) 表名
+  char *attribute_name;  // attribute name              属性名
+  AggType aggType;
+}AggAttr;
+
+typedef enum {
   EQUAL_TO,     //"="     0
   LESS_EQUAL,   //"<="    1
   NOT_EQUAL,    //"<>"    2
@@ -64,6 +78,8 @@ typedef struct _Condition {
 typedef struct {
   size_t    attr_num;               // Length of attrs in Select clause
   RelAttr   attributes[MAX_NUM];    // attrs in Select clause
+  size_t    agg_num;
+  AggAttr   aggAttrs[MAX_NUM];
   size_t    relation_num;           // Length of relations in Fro clause
   char *    relations[MAX_NUM];     // relations in From clause
   size_t    condition_num;          // Length of conditions in Where clause
@@ -165,7 +181,8 @@ enum SqlCommandFlag {
   SCF_ROLLBACK,
   SCF_LOAD_DATA,
   SCF_HELP,
-  SCF_EXIT
+  SCF_EXIT,
+  SCF_AGG,
 };
 // struct of flag and sql_struct
 typedef struct Query {
@@ -179,6 +196,9 @@ extern "C" {
 
 void relation_attr_init(RelAttr *relation_attr, const char *relation_name, const char *attribute_name);
 void relation_attr_destroy(RelAttr *relation_attr);
+
+void relation_agg_init(AggAttr *agg_attr, const char *relation_name, const char *attribute_name, AggType type);
+void relation_agg_destroy(AggAttr *agg_attr);
 
 void value_init_integer(Value *value, int v);
 void value_init_float(Value *value, float v);
@@ -195,6 +215,7 @@ void attr_info_destroy(AttrInfo *attr_info);
 
 void selects_init(Selects *selects, ...);
 void selects_append_attribute(Selects *selects, RelAttr *rel_attr);
+void selects_append_aggregation(Selects *selects, AggAttr *agg_attr);
 void selects_append_relation(Selects *selects, const char *relation_name);
 void selects_append_conditions(Selects *selects, Condition conditions[], size_t condition_num);
 void selects_destroy(Selects *selects);

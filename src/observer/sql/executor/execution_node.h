@@ -16,6 +16,7 @@ See the Mulan PSL v2 for more details. */
 #define __OBSERVER_SQL_EXECUTOR_EXECUTION_NODE_H_
 
 #include <vector>
+#include <unordered_map>
 #include "storage/common/condition_filter.h"
 #include "sql/executor/tuple.h"
 
@@ -43,6 +44,22 @@ private:
   Table  * table_;
   TupleSchema  tuple_schema_;
   std::vector<DefaultConditionFilter *> condition_filters_;
+};
+
+class AggregateExeNode : public ExecutionNode {
+ public:
+  AggregateExeNode();
+  virtual ~AggregateExeNode();
+
+  RC init(Trx *trx, Table *table,
+               TupleSchema &&tupleSchema, std::vector<AggType>& aggTypes);
+  RC execute(TupleSet &tuple_set) override;
+ private:
+  Trx *trx_ = nullptr;
+  Table  *table_;
+  TupleSchema tupleSchema_;
+  std::vector<AggType> aggTypes_;
+  std::vector<TupleValue> values_;
 };
 
 #endif //__OBSERVER_SQL_EXECUTOR_EXECUTION_NODE_H_

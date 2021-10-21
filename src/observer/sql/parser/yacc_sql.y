@@ -103,6 +103,10 @@ ParserContext *get_context(yyscan_t scanner)
         LE
         GE
         NE
+        COUNT
+        AVG
+        MIN
+        MAX
 
 %union {
   struct _Attr *attr;
@@ -358,6 +362,21 @@ select:				/*  select 语句的语法解析树*/
 			CONTEXT->select_length=0;
 			CONTEXT->value_length = 0;
 	}
+	|SELECT agg_attr FROM ID SEMICOLON
+         		{
+         			// CONTEXT->ssql->sstr.selection.relations[CONTEXT->from_length++]=$4;
+         			selects_append_relation(&CONTEXT->ssql->sstr.selection, $4);
+
+         			CONTEXT->ssql->flag=SCF_AGG;//"select";
+         			// CONTEXT->ssql->sstr.selection.attr_num = CONTEXT->select_length;
+
+         			//临时变量清零
+         			CONTEXT->condition_length=0;
+         			CONTEXT->from_length=0;
+         			CONTEXT->select_length=0;
+         			CONTEXT->value_length = 0;
+         	}
+
 	;
 
 select_attr:
@@ -377,6 +396,7 @@ select_attr:
 			selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
 		}
     ;
+
 attr_list:
     /* empty */
     | COMMA ID attr_list {
@@ -559,6 +579,74 @@ condition:
 			// $$->right_attr.attribute_name=$7;
     }
     ;
+
+agg_attr:
+	COUNT LBRACE ID RBRACE agg_list{
+        		AggAttr agg;
+        		relation_agg_init(&agg, NULL, $3, COUNT_AGG);
+        		selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
+        	}
+        	| COUNT LBRACE STAR RBRACE agg_list{
+        		AggAttr agg;
+                        relation_agg_init(&agg, NULL, "*", COUNT_AGG);
+                        selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
+        	}
+        	| COUNT LBRACE "1" RBRACE agg_list{
+        		AggAttr agg;
+                        relation_agg_init(&agg, NULL, "*", COUNT_AGG);
+                        selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
+        	}
+        	| MAX LBRACE ID RBRACE agg_list{
+        			AggAttr agg;
+                		relation_agg_init(&agg, NULL, $3, MAX_AGG);
+                		selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
+        	}
+        	| MIN LBRACE ID RBRACE agg_list{
+        			AggAttr agg;
+                		relation_agg_init(&agg, NULL, $3, MIN_AGG);
+                		selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
+        	}
+        	| AVG LBRACE ID RBRACE agg_list{
+        			AggAttr agg;
+                		relation_agg_init(&agg, NULL, $3, AVG_AGG);
+                		selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
+        	}
+        	;
+
+agg_list:
+	|
+	COMMA COUNT LBRACE ID RBRACE agg_list{
+		AggAttr agg;
+		relation_agg_init(&agg, NULL, $4, COUNT_AGG);
+		selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
+	}
+	| COMMA COUNT LBRACE STAR RBRACE agg_list{
+		AggAttr agg;
+                relation_agg_init(&agg, NULL, "*", COUNT_AGG);
+                selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
+	}
+	| COMMA COUNT LBRACE "1" RBRACE agg_list{
+		AggAttr agg;
+                relation_agg_init(&agg, NULL, "*", COUNT_AGG);
+                selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
+	}
+	| COMMA MAX LBRACE ID RBRACE agg_list{
+			AggAttr agg;
+        		relation_agg_init(&agg, NULL, $4, MAX_AGG);
+        		selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
+	}
+	| COMMA MIN LBRACE ID RBRACE agg_list{
+			AggAttr agg;
+        		relation_agg_init(&agg, NULL, $4, MIN_AGG);
+        		selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
+	}
+	| COMMA AVG LBRACE ID RBRACE agg_list{
+			AggAttr agg;
+        		relation_agg_init(&agg, NULL, $4, AVG_AGG);
+        		selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
+	}
+	;
+
 
 comOp:
   	  EQ { CONTEXT->comp = EQUAL_TO; }

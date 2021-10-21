@@ -27,6 +27,7 @@ public:
 
   virtual void to_string(std::ostream &os) const = 0;
   virtual int compare(const TupleValue &other) const = 0;
+  virtual TupleValue& operator+=(const TupleValue &other) = 0;
 private:
 };
 
@@ -43,6 +44,8 @@ public:
     const IntValue & int_other = (const IntValue &)other;
     return value_ - int_other.value_;
   }
+
+  IntValue& operator+=(const TupleValue &other) override {}
 
 private:
   int value_;

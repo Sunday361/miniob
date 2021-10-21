@@ -122,12 +122,15 @@ void ExecuteStage::handle_request(common::StageEvent *event) {
   exe_event->push_callback(cb);
 
   switch (sql->flag) {
+    case SCF_AGG: { // agg
+      do_agg(current_db, sql, exe_event->sql_event()->session_event());
+      exe_event->done_immediate();
+    }
     case SCF_SELECT: { // select
       do_select(current_db, sql, exe_event->sql_event()->session_event());
       exe_event->done_immediate();
     }
     break;
-
     case SCF_INSERT:
     case SCF_UPDATE:
     case SCF_DELETE:
