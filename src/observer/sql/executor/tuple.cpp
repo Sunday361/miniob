@@ -233,7 +233,12 @@ void TupleRecordConverter::add_record(const char *record) {
         const char *s = record + field_meta->offset();  // 现在当做Cstring来处理
         tuple.add(s, strlen(s));
       }
-      break;
+        break;
+      case DATES: {
+        const char *s = record + field_meta->offset();  // 现在当做Cstring来处理
+        tuple.add(s, strlen(s));
+      }
+        break;
       default: {
         LOG_PANIC("Unsupported field type. type=%d", field_meta->type());
       }

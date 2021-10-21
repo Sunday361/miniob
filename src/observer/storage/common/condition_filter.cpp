@@ -40,7 +40,7 @@ DefaultConditionFilter::~DefaultConditionFilter()
 
 RC DefaultConditionFilter::init(const ConDesc &left, const ConDesc &right, AttrType attr_type, CompOp comp_op)
 {
-  if (attr_type < CHARS || attr_type > FLOATS) {
+  if (attr_type < CHARS || attr_type > DATES) {
     LOG_ERROR("Invalid condition with unsupported attribute type: %d", attr_type);
     return RC::INVALID_ARGUMENT;
   }
@@ -157,6 +157,10 @@ bool DefaultConditionFilter::filter(const Record &rec) const
       float left = *(float *)left_value;
       float right = *(float *)right_value;
       cmp_result = (int)(left - right);
+    } break;
+    case DATES: {  // 日期都是定长的，直接比较
+      // 按照C字符串风格来定
+      cmp_result = strcmp(left_value, right_value);
     } break;
     default: {
     }

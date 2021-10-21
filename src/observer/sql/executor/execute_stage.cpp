@@ -213,6 +213,9 @@ void end_trx_if_need(Session *session, Trx *trx, bool all_right) {
   }
 }
 
+RC ExecuteStage::examine() {
+
+}
 // 这里没有对输入的某些信息做合法性校验，比如查询的列名、where条件中的列名等，没有做必要的合法性校验
 // 需要补充上这一部分. 校验部分也可以放在resolve，不过跟execution放一起也没有关系
 RC ExecuteStage::do_select(const char *db, Query *sql, SessionEvent *session_event) {
@@ -233,6 +236,7 @@ RC ExecuteStage::do_select(const char *db, Query *sql, SessionEvent *session_eve
         delete tmp_node;
       }
       end_trx_if_need(session, trx, false);
+      session_event->set_response("FAILURE\n");
       return rc;
     }
     select_nodes.push_back(select_node);
@@ -309,6 +313,9 @@ RC create_selection_executor(Trx *trx, const Selects &selects, const char *db, c
     if (nullptr == attr.relation_name || 0 == strcmp(table_name, attr.relation_name)) {
       if (0 == strcmp("*", attr.attribute_name)) {
         // 列出这张表所有字段
+        if (!schema.fields().empty()) {
+          return RC::SQL_SYNTAX;
+        }
         TupleSchema::from_table(table, schema);
         break; // 没有校验，给出* 之后，再写字段的错误
       } else {

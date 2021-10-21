@@ -83,6 +83,7 @@ ParserContext *get_context(yyscan_t scanner)
         INT_T
         STRING_T
         FLOAT_T
+        DATE_T
         HELP
         EXIT
         DOT //QUOTE
@@ -120,6 +121,7 @@ ParserContext *get_context(yyscan_t scanner)
 %token <string> SSS
 %token <string> STAR
 %token <string> STRING_V
+%token <string> DATE
 //非终结符
 
 %type <number> type;
@@ -268,6 +270,7 @@ type:
 	INT_T { $$=INTS; }
        | STRING_T { $$=CHARS; }
        | FLOAT_T { $$=FLOATS; }
+       | DATE_T { $$=DATES; }
        ;
 ID_get:
 	ID 
@@ -309,9 +312,13 @@ value:
   		value_init_float(&CONTEXT->values[CONTEXT->value_length++], $1);
 		}
     |SSS {
-			$1 = substr($1,1,strlen($1)-2);
+		$1 = substr($1,1,strlen($1)-2);
   		value_init_string(&CONTEXT->values[CONTEXT->value_length++], $1);
 		}
+    |DATE {
+    		$1 = substr($1,1,strlen($1)-2);
+      		date_init_string(&CONTEXT->values[CONTEXT->value_length++], $1);
+    		}
     ;
     
 delete:		/*  delete 语句的语法解析树*/
@@ -354,7 +361,7 @@ select:				/*  select 语句的语法解析树*/
 	;
 
 select_attr:
-    STAR {  
+    STAR attr_list{
 			RelAttr attr;
 			relation_attr_init(&attr, NULL, "*");
 			selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
