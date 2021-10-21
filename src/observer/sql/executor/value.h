@@ -27,13 +27,14 @@ public:
 
   virtual void to_string(std::ostream &os) const = 0;
   virtual int compare(const TupleValue &other) const = 0;
-  virtual TupleValue& operator+=(const TupleValue &other) = 0;
+  virtual void addValue(const TupleValue &other) = 0;
+  virtual void setValue(const TupleValue &other) = 0;
 private:
 };
 
 class IntValue : public TupleValue {
 public:
-  explicit IntValue(int value) : value_(value) {
+  IntValue(int value) : value_(value) {
   }
 
   void to_string(std::ostream &os) const override {
@@ -42,10 +43,19 @@ public:
 
   int compare(const TupleValue &other) const override {
     const IntValue & int_other = (const IntValue &)other;
-    return value_ - int_other.value_;
+    if (value_ == int_other.value_) return 0;
+    return value_ > int_other.value_ ? 1 : -1;
   }
 
-  IntValue& operator+=(const TupleValue &other) override {}
+  void addValue(const TupleValue &other) override {
+    const IntValue & int_other = (const IntValue &)other;
+    value_ += int_other.value_;
+  }
+
+  void setValue(const TupleValue &other) {
+    const IntValue & int_other = (const IntValue &)other;
+    value_ = int_other.value_;
+  }
 
 private:
   int value_;
@@ -53,7 +63,7 @@ private:
 
 class FloatValue : public TupleValue {
 public:
-  explicit FloatValue(float value) : value_(value) {
+  FloatValue(float value) : value_(value) {
   }
 
   void to_string(std::ostream &os) const override {
@@ -62,15 +72,20 @@ public:
 
   int compare(const TupleValue &other) const override {
     const FloatValue & float_other = (const FloatValue &)other;
-    float result = value_ - float_other.value_;
-    if (result > 0) { // 浮点数没有考虑精度问题
-      return 1;
-    }
-    if (result < 0) {
-      return -1;
-    }
-    return 0;
+    if(value_ == float_other.value_) return 0;
+    return value_ > float_other.value_ ? 1 : -1;
   }
+
+  void addValue(const TupleValue &other) override {
+    const FloatValue & float_other = (const FloatValue &)other;
+    value_ += float_other.value_;
+  }
+
+  void setValue(const TupleValue &other) override {
+    const FloatValue & float_other = (const FloatValue &)other;
+    value_ = float_other.value_;
+  }
+
 private:
   float value_;
 };
@@ -89,6 +104,16 @@ public:
   int compare(const TupleValue &other) const override {
     const StringValue &string_other = (const StringValue &)other;
     return strcmp(value_.c_str(), string_other.value_.c_str());
+  }
+
+  void addValue(const TupleValue &other) override { // should not be used
+    const StringValue & string_other = (const StringValue &)other;
+    value_ += string_other.value_;
+  }
+
+  void setValue(const TupleValue &other) override { // should not be used
+    const StringValue & string_other = (const StringValue &)other;
+    value_ = string_other.value_;
   }
 private:
   std::string value_;

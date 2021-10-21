@@ -13,8 +13,14 @@ See the Mulan PSL v2 for more details. */
 //
 
 #include "sql/executor/execution_node.h"
-#include "storage/common/table.h"
+
+#include <sstream>
+
 #include "common/log/log.h"
+#include "storage/common/table.h"
+
+using FLOAT = std::numeric_limits<float>;
+using INT = std::numeric_limits<int>;
 
 SelectExeNode::SelectExeNode() : table_(nullptr) {
 }
@@ -57,12 +63,37 @@ AggregateExeNode::~AggregateExeNode() noexcept {
 }
 
 RC AggregateExeNode::init(Trx *trx, Table *table,
-                          TupleSchema &&tupleSchema, std::vector<AggType>& aggTypes) {
+                          TupleSchema &tupleSchema, std::vector<AggType>& aggTypes) {
   trx_ = trx;
   table_ = table;
   tupleSchema_ = tupleSchema;
   aggTypes_ = aggTypes;
-  values_.resize(aggTypes.size());
+  for (size_t i = 0; i < aggTypes.size(); i++) {
+    switch (aggTypes[i]) {
+      case COUNT_AGG:
+        values_.emplace_back(new IntValue(0)); break;
+      case MIN_AGG:
+        if (tupleSchema.field(i).type() == FLOATS)
+          values_.emplace_back(new FloatValue(FLOAT::max()));
+        else if (tupleSchema.field(i).type() == INTS)
+          values_.emplace_back(new IntValue(INT::max()));
+        break;
+      case MAX_AGG:
+        if (tupleSchema.field(i).type() == FLOATS)
+          values_.emplace_back(new FloatValue(FLOAT::min()));
+        else if (tupleSchema.field(i).type() == INTS)
+          values_.emplace_back(new IntValue(INT::min()));
+        break;
+      case AVG_AGG:
+        if (tupleSchema.field(i).type() == FLOATS)
+          values_.emplace_back(new FloatValue(0));
+        else if (tupleSchema.field(i).type() == INTS)
+          values_.emplace_back(new IntValue(0));
+        break;
+      default:
+        return RC::INVALID_ARGUMENT;
+    }
+  }
   return RC::SUCCESS;
 }
 
@@ -75,16 +106,22 @@ RC AggregateExeNode::execute(TupleSet &tuple_set) {
     return rc;
   }
   for (auto& tuple : tuple_set.tuples()) {
-    for (int i = 0; i < aggTypes_.size(); i++) {
+    for (size_t i = 0; i < aggTypes_.size(); i++) {
       switch (aggTypes_[i]) {
         case AVG_AGG:
-          values_[i] += tuple.get(i); break;
+          values_[i]->addValue(tuple.get(i)); break;
         case MAX_AGG:
-          values_[i] += tuple.get(i); break;
+          if (values_[i]->compare(tuple.get(i)) == -1) {
+            values_[i]->setValue(tuple.get(i));
+          }
+          break;
         case MIN_AGG:
-          values_[i] += tuple.get(i); break;
+          if (values_[i]->compare(tuple.get(i)) == 1) {
+            values_[i]->setValue(tuple.get(i));
+          }
+          break;
         case COUNT_AGG:
-          values_[i] += tuple.get(i); break;
+          values_[i]->addValue(IntValue(1)); break;
         case NO_AGG:
           return RC::INVALID_ARGUMENT;
       }

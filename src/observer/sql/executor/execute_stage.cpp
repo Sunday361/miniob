@@ -123,6 +123,7 @@ void ExecuteStage::handle_request(common::StageEvent *event) {
 
   switch (sql->flag) {
     case SCF_AGG: { // agg
+      LOG_INFO("execute aggregation");
       do_agg(current_db, sql, exe_event->sql_event()->session_event());
       exe_event->done_immediate();
     }
@@ -216,9 +217,6 @@ void end_trx_if_need(Session *session, Trx *trx, bool all_right) {
   }
 }
 
-RC ExecuteStage::examine() {
-
-}
 // 这里没有对输入的某些信息做合法性校验，比如查询的列名、where条件中的列名等，没有做必要的合法性校验
 // 需要补充上这一部分. 校验部分也可以放在resolve，不过跟execution放一起也没有关系
 RC ExecuteStage::do_select(const char *db, Query *sql, SessionEvent *session_event) {
@@ -355,4 +353,57 @@ RC create_selection_executor(Trx *trx, const Selects &selects, const char *db, c
   }
 
   return select_node.init(trx, table, std::move(schema), std::move(condition_filters));
+}
+
+
+RC ExecuteStage::do_agg(const char *db, Query *sql, SessionEvent *session_event) {
+  RC rc = RC::SUCCESS;
+  Session *session = session_event->get_client()->session;
+  Trx *trx = session->current_trx();
+  const Selects &selects = sql->sstr.selection;
+
+  AggregateExeNode *aggregateExeNode = new AggregateExeNode();
+  const char *table_name = selects.relations[0];
+  TupleSchema schema;
+  Table * table = DefaultHandler::get_default().find_table(db, table_name);
+  std::vector<AggType> types(selects.agg_num, NO_AGG);
+  if (nullptr == table) {
+    LOG_WARN("No such table [%s] in db [%s]", table_name, db);
+    return RC::SCHEMA_TABLE_NOT_EXIST;
+  }
+
+  for (int i = selects.agg_num - 1; i >= 0; i--) {
+    const AggAttr &attr = selects.aggAttrs[i];
+    types[i] = attr.aggType;
+    if (nullptr == attr.relation_name || 0 == strcmp(table_name, attr.relation_name)) {
+      if (0 == strcmp("*", attr.attribute_name)) {
+        // 列出这张表所有字段
+        if (attr.aggType != COUNT_AGG) {
+          return RC::SQL_SYNTAX;
+        }
+        TupleSchema::from_table(table, schema);
+      } else {
+        // 列出这张表相关字段
+        RC rc = schema_add_field(table, attr.attribute_name, schema);
+        if (rc != RC::SUCCESS) {
+          return rc;
+        }
+      }
+    }
+  }
+  aggregateExeNode->init(trx, table, schema, types);
+  TupleSet tuple_set;
+  rc = aggregateExeNode->execute(tuple_set);
+  auto values = aggregateExeNode->getValues();
+
+  std::stringstream ss;
+  schema.print(ss);
+  for (size_t i = 0; i < values.size(); i++) {
+    values[i]->to_string(ss);
+    if (i != values.size() - 1) ss << "|";
+  }
+  ss << std::endl;
+
+  session_event->set_response(ss.str());
+  return rc;
 }

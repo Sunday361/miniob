@@ -52,14 +52,16 @@ class AggregateExeNode : public ExecutionNode {
   virtual ~AggregateExeNode();
 
   RC init(Trx *trx, Table *table,
-               TupleSchema &&tupleSchema, std::vector<AggType>& aggTypes);
+               TupleSchema &tupleSchema, std::vector<AggType>& aggTypes);
   RC execute(TupleSet &tuple_set) override;
+
+  std::vector<TupleValue*> getValues() const { return values_; }
  private:
   Trx *trx_ = nullptr;
   Table  *table_;
   TupleSchema tupleSchema_;
   std::vector<AggType> aggTypes_;
-  std::vector<TupleValue> values_;
+  std::vector<TupleValue*> values_;
 };
 
 #endif //__OBSERVER_SQL_EXECUTOR_EXECUTION_NODE_H_
