@@ -119,5 +119,36 @@ private:
   std::string value_;
 };
 
+class DateValue : public TupleValue {
+ public:
+  DateValue(int year, int month, int day) :year_(year), month_(month), day_(day){
+  }
+
+  void to_string(std::ostream &os) const override {
+    os << year_ << "-" << month_ << "-" << day_;
+  }
+
+  int compare(const TupleValue &other) const override {
+    const DateValue &date_other = (const DateValue &)other;
+    if (year_ == date_other.year_ && month_ == date_other.month_ && day_ == date_other.day_) {
+      return 0;
+    }
+    if (year_ != date_other.year_) return year_ > date_other.year_;
+    if (month_ != date_other.month_) return month_ > date_other.month_;
+    return day_ > date_other.day_;
+  }
+
+  void addValue(const TupleValue &other) override {}// should not be used
+
+  void setValue(const TupleValue &other) override {
+    const DateValue &date_other = (const DateValue &)other;
+    year_ = date_other.year_;
+    month_ = date_other.month_;
+    day_ = date_other.day_;
+  }
+ private:
+  int year_, month_, day_;
+};
+
 
 #endif //__OBSERVER_SQL_EXECUTOR_VALUE_H_

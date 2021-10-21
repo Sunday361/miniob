@@ -320,7 +320,7 @@ value:
   		value_init_string(&CONTEXT->values[CONTEXT->value_length++], $1);
 		}
     |DATE {
-    		$1 = substr($1,1,strlen($1)-2);
+    		$1 = substr($1,1,strlen($1)-1);
       		date_init_string(&CONTEXT->values[CONTEXT->value_length++], $1);
     		}
     ;

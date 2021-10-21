@@ -1802,7 +1802,7 @@ yyreduce:
   case 49:
 #line 322 "yacc_sql.y"
           {
-    		(yyvsp[0].string) = substr((yyvsp[0].string),1,strlen((yyvsp[0].string))-2);
+    		(yyvsp[0].string) = substr((yyvsp[0].string),1,strlen((yyvsp[0].string))-1);
       		date_init_string(&CONTEXT->values[CONTEXT->value_length++], (yyvsp[0].string));
     		}
 #line 1809 "yacc_sql.tab.c"

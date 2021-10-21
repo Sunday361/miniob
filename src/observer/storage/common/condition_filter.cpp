@@ -158,9 +158,14 @@ bool DefaultConditionFilter::filter(const Record &rec) const
       float right = *(float *)right_value;
       cmp_result = (int)(left - right);
     } break;
-    case DATES: {  // 日期都是定长的，直接比较
-      // 按照C字符串风格来定
-      cmp_result = strcmp(left_value, right_value);
+    case DATES: {
+      int idx = 0; int left = 0, right = 0;
+      while (left == right && idx < 3) {
+        left = *((int *)left_value + idx);
+        right = *((int *)right_value + idx);
+        idx++;
+      }
+      cmp_result = left - right;
     } break;
     default: {
     }

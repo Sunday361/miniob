@@ -56,6 +56,10 @@ void Tuple::add(const char *s, int len) {
   add(new StringValue(s, len));
 }
 
+void Tuple::add(int yy, int mm, int dd) {
+  add(new DateValue(yy, mm, dd));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 std::string TupleField::to_string() const {
@@ -235,8 +239,10 @@ void TupleRecordConverter::add_record(const char *record) {
       }
         break;
       case DATES: {
-        const char *s = record + field_meta->offset();  // 现在当做Cstring来处理
-        tuple.add(s, strlen(s));
+        int year = *(int*)(record + field_meta->offset());
+        int month = *(int*)(record + field_meta->offset() + 4);
+        int day = *(int*)(record + field_meta->offset() + 8);
+        tuple.add(year, month, day);
       }
         break;
       default: {

@@ -22,6 +22,7 @@ RC parse(char *st, Query *sqln);
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
+
 void relation_attr_init(RelAttr *relation_attr, const char *relation_name, const char *attribute_name) {
   if (relation_name != nullptr) {
     relation_attr->relation_name = strdup(relation_name);
@@ -73,6 +74,29 @@ void value_init_string(Value *value, const char *v) {
 void date_init_string(Value *value, const char *v) {
   value->type = DATES;
   value->data = strdup(v);
+  int a[3] = {0}, t = 0;
+  char *ch = (char*)value->data;
+  while(*ch != '\"') {
+    if (*ch != '-') {
+      a[t] = a[t] * 10 + (*ch - '0');
+    }else {
+      t++;
+    }
+    ch++;
+  }
+  if (a[0] % 4 != 0 && a[1] == 2 && a[2] > 28) {
+    value->type = UNDEFINED; return;
+  }
+  if (a[0] % 4 == 0 && a[1] == 2 && a[2] > 29) {
+    value->type = UNDEFINED; return;
+  }
+  if (a[1] == 4 || a[1] == 6 || a[1] == 9 || a[1] == 11) {
+    if (a[2] > 30) {
+      value->type = UNDEFINED; return;
+    }
+  }
+  value->data = malloc(3 * sizeof(int));
+  memmove(value->data, a, 12);
 }
 void value_destroy(Value *value) {
   value->type = UNDEFINED;
@@ -114,7 +138,7 @@ void condition_destroy(Condition *condition) {
 void attr_info_init(AttrInfo *attr_info, const char *name, AttrType type, size_t length) {
   attr_info->name = strdup(name);
   attr_info->type = type;
-  attr_info->length = type == DATES ? 10 : length;
+  attr_info->length = type == DATES ? 12 : length;
 }
 void attr_info_destroy(AttrInfo *attr_info) {
   free(attr_info->name);
@@ -373,6 +397,7 @@ void query_reset(Query *query) {
     case SCF_HELP:
     case SCF_EXIT:
     case SCF_ERROR:
+    case SCF_AGG:
     break;
   }
 }
