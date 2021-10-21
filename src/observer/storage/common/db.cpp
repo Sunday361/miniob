@@ -75,7 +75,12 @@ RC Db::drop_table(const char *table_name) {
   if (opened_tables_.count(table_name) == 0) {
     return RC::SCHEMA_TABLE_NOT_EXIST;
   }
+  RC rc;
   auto table = opened_tables_[table_name];
+  rc = table->sync();
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
   int indexSize = table->table_meta().index_num();
   std::string index_path = path_ + "/";
   for (int i = 0; i < indexSize; i++) {
@@ -92,6 +97,7 @@ RC Db::drop_table(const char *table_name) {
   unlink(data_file.c_str());
 
   opened_tables_.erase(opened_tables_.find(table_name));
+  delete table;
   return RC::SUCCESS;
 }
 

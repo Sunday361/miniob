@@ -76,7 +76,7 @@ void date_init_string(Value *value, const char *v) {
   value->data = strdup(v);
   int a[3] = {0}, t = 0;
   char *ch = (char*)value->data;
-  while(*ch != '\"') {
+  while(*ch != '\"' && *ch != '\'') {
     if (*ch != '-') {
       a[t] = a[t] * 10 + (*ch - '0');
     }else {
