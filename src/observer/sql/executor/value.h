@@ -67,7 +67,23 @@ public:
   }
 
   void to_string(std::ostream &os) const override {
-    os << std::setiosflags(std::ios::fixed) << std::setprecision(2) << value_;
+    auto s = std::to_string(value_);
+    int idx = s.size() - 1;
+    while(s[idx] != '.') {
+      idx--;
+    }
+    if (idx != -1) {
+      if (s.size() - 1 - idx > 2) {
+        s = s.substr(0, idx + 3);
+      }
+      if (s.back() == '0') {
+        s.pop_back();
+      }
+      if (s.back() == '.') {
+        s.pop_back();
+      }
+    }
+    os << s;
   }
 
   int compare(const TupleValue &other) const override {
