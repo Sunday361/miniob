@@ -56,8 +56,8 @@ void Tuple::add(const char *s, int len) {
   add(new StringValue(s, len));
 }
 
-void Tuple::add(int yy, int mm, int dd) {
-  add(new DateValue(yy, mm, dd));
+void Tuple::add_date(int value) {
+  add(new DateValue(value));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -239,10 +239,8 @@ void TupleRecordConverter::add_record(const char *record) {
       }
         break;
       case DATES: {
-        int year = *(int*)(record + field_meta->offset());
-        int month = *(int*)(record + field_meta->offset() + 4);
-        int day = *(int*)(record + field_meta->offset() + 8);
-        tuple.add(year, month, day);
+        int value = *(int*)(record + field_meta->offset());
+        tuple.add_date(value);
       }
         break;
       default: {

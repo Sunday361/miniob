@@ -95,8 +95,9 @@ void date_init_string(Value *value, const char *v) {
       value->type = UNDEFINED; return;
     }
   }
-  value->data = malloc(3 * sizeof(int));
-  memmove(value->data, a, 12);
+  value->data = malloc(sizeof(int));
+  int date = a[0] * 10000 + a[1] * 100 + a[2];
+  memmove(value->data, &date, 4);
 }
 void value_destroy(Value *value) {
   value->type = UNDEFINED;
@@ -138,7 +139,7 @@ void condition_destroy(Condition *condition) {
 void attr_info_init(AttrInfo *attr_info, const char *name, AttrType type, size_t length) {
   attr_info->name = strdup(name);
   attr_info->type = type;
-  attr_info->length = type == DATES ? 12 : length;
+  attr_info->length = 4;
 }
 void attr_info_destroy(AttrInfo *attr_info) {
   free(attr_info->name);

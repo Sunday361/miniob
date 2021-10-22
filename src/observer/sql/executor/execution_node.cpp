@@ -133,9 +133,7 @@ RC AggregateExeNode::execute(TupleSet &tuple_set) {
   for (int i = 0; i < aggTypes_.size(); i++) {
     if (aggTypes_[i] == AVG_AGG){
       auto ptr = values_[i];
-      std::stringstream ss;
-      ptr->to_string(ss);
-      auto num = stof(ss.str());
+      auto num = ptr->getValue();
       values_[i] = new FloatValue(num / tuple_set.size());
       delete ptr;
     }
