@@ -17,6 +17,7 @@ See the Mulan PSL v2 for more details. */
 
 #include <vector>
 #include <unordered_map>
+#include <limits>
 #include "storage/common/condition_filter.h"
 #include "sql/executor/tuple.h"
 
