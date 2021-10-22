@@ -37,7 +37,6 @@ DAY              [0]{0,1}[1-9]|[1-2][0-9]|[3][0-1]
 
 {WHITE_SAPCE}                           // ignore whitespace
 \n																						 ;
-[1]                                                RETURN_TOKEN(COUNT_1);
 [\-]?{DIGIT}+					                   yylval->number=atoi(yytext); RETURN_TOKEN(NUMBER);
 [\-]?{DIGIT}+{DOT}{DIGIT}+				       yylval->floats=(float)(atof(yytext)); RETURN_TOKEN(FLOAT);
 
@@ -79,6 +78,7 @@ DAY              [0]{0,1}[1-9]|[1-2][0-9]|[3][0-1]
 [Ll][Oo][Aa][Dd]			                   RETURN_TOKEN(LOAD);
 [Dd][Aa][Tt][Aa]	                       RETURN_TOKEN(DATA);
 [Ii][Nn][Ff][Ii][Ll][Ee]                 RETURN_TOKEN(INFILE);
+[Cc][Oo][Uu][Nn][Tt]"(""1"")"            RETURN_TOKEN(COUNT_1);
 {ID}							                       yylval->string=strdup(yytext); RETURN_TOKEN(ID);
 "("								                       RETURN_TOKEN(LBRACE);
 ")"								                       RETURN_TOKEN(RBRACE);

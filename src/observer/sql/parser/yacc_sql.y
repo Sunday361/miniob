@@ -592,7 +592,7 @@ agg_attr:
                         relation_agg_init(&agg, NULL, "*", COUNT_AGG);
                         selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
         	}
-        	| COUNT LBRACE COUNT_1 RBRACE agg_list{
+        	| COUNT_1 agg_list{
         		AggAttr agg;
                         relation_agg_init(&agg, NULL, "1", COUNT_AGG);
                         selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
@@ -626,7 +626,7 @@ agg_list:
                 relation_agg_init(&agg, NULL, "*", COUNT_AGG);
                 selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
 	}
-	| COMMA COUNT LBRACE COUNT_1 RBRACE agg_list{
+	| COMMA COUNT_1 agg_list{
 		AggAttr agg;
                 relation_agg_init(&agg, NULL, "1", COUNT_AGG);
                 selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);

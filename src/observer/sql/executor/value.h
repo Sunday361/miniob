@@ -16,7 +16,7 @@ See the Mulan PSL v2 for more details. */
 #define __OBSERVER_SQL_EXECUTOR_VALUE_H_
 
 #include <string.h>
-
+#include <iomanip>
 #include <string>
 #include <ostream>
 
@@ -67,7 +67,7 @@ public:
   }
 
   void to_string(std::ostream &os) const override {
-    os << value_;
+    os << std::setiosflags(std::ios::fixed) << std::setprecision(2) << value_;
   }
 
   int compare(const TupleValue &other) const override {

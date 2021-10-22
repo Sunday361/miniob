@@ -151,6 +151,7 @@ RC DefaultHandler::drop_index(Trx *trx, const char *dbname, const char *relation
 RC DefaultHandler::insert_record(Trx *trx, const char *dbname, const char *relation_name, int value_num, const Value *values) {
   Table *table = find_table(dbname, relation_name);
   if (nullptr == table) {
+    LOG_INFO("SCHEMA_TABLE_NOT_EXIST");
     return RC::SCHEMA_TABLE_NOT_EXIST;
   }
 
