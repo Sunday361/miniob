@@ -272,28 +272,6 @@ RC ExecuteStage::do_select(const char *db, Query *sql, SessionEvent *session_eve
       tupleSet.schema().print(ss);
       outputNums = outputNums * (tupleSet.size() == 0 ? 1 : tupleSet.size());
     } // print schema
-
-    std::vector<DefaultConditionFilter *> condition_filters;
-    for (size_t i = 0; i < selects.condition_num; i++) {
-      const Condition &condition = selects.conditions[i];
-      if (condition.left_is_attr == 1 && condition.right_is_attr == 1
-          && 0 != strcmp(condition.left_attr.relation_name, condition.right_attr.relation_name)) {
-        DefaultConditionFilter *condition_filter = new DefaultConditionFilter();
-        //auto table_left =
-        //RC rc = condition_filter->init();
-        if (rc != RC::SUCCESS) {
-          delete condition_filter;
-          for (DefaultConditionFilter * &filter : condition_filters) {
-            delete filter;
-          }
-          return rc;
-        }
-        condition_filters.push_back(condition_filter);
-      }
-    }// for outFilter
-    for (int i = 0; i < outputNums; i++) {
-
-    }
     // 本次查询了多张表，需要做join操作
   } else {
     // 当前只查询一张表，直接返回结果即可

@@ -69,14 +69,14 @@ public:
   void to_string(std::ostream &os) const override {
     auto s = std::to_string(value_);
     int idx = s.size() - 1;
-    while(s[idx] != '.') {
+    while(idx >= 0 && s[idx] != '.') {
       idx--;
     }
     if (idx != -1) {
       if (s.size() - 1 - idx > 2) {
         s = s.substr(0, idx + 3);
       }
-      if (s.back() == '0') {
+      while (s.back() == '0') {
         s.pop_back();
       }
       if (s.back() == '.') {
@@ -141,7 +141,11 @@ class DateValue : public TupleValue {
   }
 
   void to_string(std::ostream &os) const override {
-    os << year_ << "-" << month_ << "-" << day_;
+    os << year_ << "-";
+    if (month_ < 10) os << "0";
+    os << month_ << "-";
+    if (day_ < 10) os << "0";
+    os << day_;
   }
 
   int compare(const TupleValue &other) const override {
