@@ -62,12 +62,13 @@ AggregateExeNode::~AggregateExeNode() noexcept {
 
 }
 
-RC AggregateExeNode::init(Trx *trx, Table *table,
-                          TupleSchema &tupleSchema, std::vector<AggType>& aggTypes) {
+RC AggregateExeNode::init(Trx *trx, Table *table, TupleSchema &tupleSchema,
+        std::vector<AggType>& aggTypes, std::vector<DefaultConditionFilter *> &&condition_filters){
   trx_ = trx;
   table_ = table;
   tupleSchema_ = tupleSchema;
   aggTypes_ = aggTypes;
+  condition_filters_ = condition_filters;
   for (size_t i = 0; i < aggTypes.size(); i++) {
     switch (aggTypes[i]) {
       case COUNT_AGG:
@@ -100,13 +101,15 @@ RC AggregateExeNode::init(Trx *trx, Table *table,
 RC AggregateExeNode::execute(TupleSet &tuple_set) {
   tuple_set.clear();
   tuple_set.set_schema(tupleSchema_);
+  CompositeConditionFilter condition_filter;
+  condition_filter.init((const ConditionFilter **)condition_filters_.data(), condition_filters_.size());
   TupleRecordConverter converter(table_, tuple_set);
-  RC rc = table_->scan_record(trx_, nullptr, -1, (void *)&converter, record_reader);
+  RC rc = table_->scan_record(trx_, &condition_filter, -1, (void *)&converter, record_reader);
   if (rc != RC::SUCCESS) {
     return rc;
   }
   for (auto& tuple : tuple_set.tuples()) {
-    for (size_t i = 0; i < aggTypes_.size(); i++) {
+    for (int i = 0; i < aggTypes_.size(); i++) {
       switch (aggTypes_[i]) {
         case AVG_AGG:
           values_[i]->addValue(tuple.get(i)); break;

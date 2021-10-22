@@ -299,6 +299,17 @@ static RC schema_add_field(Table *table, const char *field_name, TupleSchema &sc
   return RC::SUCCESS;
 }
 
+static RC schema_add_field_agg(Table *table, const char *field_name, TupleSchema &schema) {
+  const FieldMeta *field_meta = table->table_meta().field(field_name);
+  if (nullptr == field_meta) {
+    LOG_WARN("No such field. %s.%s", table->name(), field_name);
+    return RC::SCHEMA_FIELD_MISSING;
+  }
+
+  schema.add(field_meta->type(), table->name(), field_meta->name());
+  return RC::SUCCESS;
+}
+
 // 把所有的表和只跟这张表关联的condition都拿出来，生成最底层的select 执行节点
 RC create_selection_executor(Trx *trx, const Selects &selects, const char *db, const char *table_name, SelectExeNode &select_node) {
   // 列出跟这张表关联的Attr
@@ -374,7 +385,7 @@ RC ExecuteStage::do_agg(const char *db, Query *sql, SessionEvent *session_event)
 
   for (int i = selects.agg_num - 1; i >= 0; i--) {
     const AggAttr &attr = selects.aggAttrs[i];
-    types[i] = attr.aggType;
+    types[selects.agg_num - 1 - i] = attr.aggType;
     if (nullptr == attr.relation_name || 0 == strcmp(table_name, attr.relation_name)) {
       if (0 == strcmp("*", attr.attribute_name)) {
         // 列出这张表所有字段
@@ -384,26 +395,69 @@ RC ExecuteStage::do_agg(const char *db, Query *sql, SessionEvent *session_event)
         TupleSchema::from_table(table, schema);
       } else {
         // 列出这张表相关字段
-        RC rc = schema_add_field(table, attr.attribute_name, schema);
+        RC rc = schema_add_field_agg(table, attr.attribute_name, schema);
         if (rc != RC::SUCCESS) {
           return rc;
         }
       }
     }
   }
-  aggregateExeNode->init(trx, table, schema, types);
+
+  std::vector<DefaultConditionFilter *> condition_filters;
+  for (int i = 0; i < selects.condition_num; i++) {
+    const Condition &condition = selects.conditions[i];
+    if ((condition.left_is_attr == 0 && condition.right_is_attr == 0) || // 两边都是值
+        (condition.left_is_attr == 1 && condition.right_is_attr == 0 && match_table(selects, condition.left_attr.relation_name, table_name)) ||  // 左边是属性右边是值
+        (condition.left_is_attr == 0 && condition.right_is_attr == 1 && match_table(selects, condition.right_attr.relation_name, table_name)) ||  // 左边是值，右边是属性名
+        (condition.left_is_attr == 1 && condition.right_is_attr == 1 &&
+         match_table(selects, condition.left_attr.relation_name, table_name) && match_table(selects, condition.right_attr.relation_name, table_name)) // 左右都是属性名，并且表名都符合
+    ) {
+      DefaultConditionFilter *condition_filter = new DefaultConditionFilter();
+      RC rc = condition_filter->init(*table, condition);
+      if (rc != RC::SUCCESS) {
+        delete condition_filter;
+        for (DefaultConditionFilter * &filter : condition_filters) {
+          delete filter;
+        }
+        return rc;
+      }
+      condition_filters.push_back(condition_filter);
+    }
+  }
+  aggregateExeNode->init(trx, table, schema, types, std::move(condition_filters));
   TupleSet tuple_set;
   rc = aggregateExeNode->execute(tuple_set);
   auto values = aggregateExeNode->getValues();
 
   std::stringstream ss;
-  schema.print(ss);
-  for (size_t i = 0; i < values.size(); i++) {
-    values[i]->to_string(ss);
-    if (i != values.size() - 1) ss << "|";
+  for (int i = selects.agg_num - 1; i >= 0; i--) {
+    switch (selects.aggAttrs[i].aggType) {
+      case COUNT_AGG:
+        ss << "count(" << selects.aggAttrs[i].attribute_name << ")";
+        break;
+      case MIN_AGG:
+        ss << "min(" << selects.aggAttrs[i].attribute_name << ")";
+        break;
+      case MAX_AGG:
+        ss << "max(" << selects.aggAttrs[i].attribute_name << ")";
+        break;
+      case AVG_AGG:
+        ss << "avg(" << selects.aggAttrs[i].attribute_name << ")";
+        break;
+      default:
+        return RC::INVALID_ARGUMENT;
+    }
+    if (i != 0) ss << "|";
   }
-  ss << std::endl;
+  ss << "\n";
+
+  for (int i = 0; i < values.size(); i++) {
+    if (i != 0) ss << "|";
+    values[i]->to_string(ss);
+  }
+  ss << "\n";
 
   session_event->set_response(ss.str());
   return rc;
 }
+
