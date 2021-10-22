@@ -42,6 +42,9 @@ Table::~Table() {
     data_buffer_pool_->close_file(file_id_);
     data_buffer_pool_ = nullptr;
   }
+  for (auto& index : indexes_) {
+    delete index;
+  }
 
   LOG_INFO("Table has been closed: %s", name());
 }

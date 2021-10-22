@@ -122,11 +122,17 @@ void ExecuteStage::handle_request(common::StageEvent *event) {
   exe_event->push_callback(cb);
 
   switch (sql->flag) {
+    case SCF_JOIN: {
+      LOG_INFO("execute inner join");
+      exe_event->done_immediate();
+    }
+    break;
     case SCF_AGG: { // agg
       LOG_INFO("execute aggregation");
       do_agg(current_db, sql, exe_event->sql_event()->session_event());
       exe_event->done_immediate();
     }
+    break;
     case SCF_SELECT: { // select
       do_select(current_db, sql, exe_event->sql_event()->session_event());
       exe_event->done_immediate();
@@ -266,12 +272,6 @@ RC ExecuteStage::do_select(const char *db, Query *sql, SessionEvent *session_eve
 
   std::stringstream ss;
   if (tuple_sets.size() > 1) {
-    int outputNums = 1;
-    for (int i = 0; i < tuple_sets.size(); i++) {
-      auto& tupleSet = tuple_sets[i];
-      tupleSet.schema().print(ss);
-      outputNums = outputNums * (tupleSet.size() == 0 ? 1 : tupleSet.size());
-    } // print schema
     // 本次查询了多张表，需要做join操作
   } else {
     // 当前只查询一张表，直接返回结果即可

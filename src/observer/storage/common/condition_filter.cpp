@@ -156,7 +156,7 @@ bool DefaultConditionFilter::filter(const Record &rec) const
     case FLOATS: {
       float left = *(float *)left_value;
       float right = *(float *)right_value;
-      cmp_result = (int)(left - right);
+      cmp_result = left - right == 0 ? 0 : (left - right > 0 ? 1:-1);
     } break;
     case DATES: {
       int idx = 0; int left = 0, right = 0;

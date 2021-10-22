@@ -182,6 +182,7 @@ enum SqlCommandFlag {
   SCF_HELP,
   SCF_EXIT,
   SCF_AGG,
+  SCF_JOIN,
 };
 // struct of flag and sql_struct
 typedef struct Query {
