@@ -387,7 +387,7 @@ RC ExecuteStage::do_agg(const char *db, Query *sql, SessionEvent *session_event)
     const AggAttr &attr = selects.aggAttrs[i];
     types[selects.agg_num - 1 - i] = attr.aggType;
     if (nullptr == attr.relation_name || 0 == strcmp(table_name, attr.relation_name)) {
-      if (0 == strcmp("*", attr.attribute_name)) {
+      if (0 == strcmp("*", attr.attribute_name) || 0 == strcmp("1", attr.attribute_name)) {
         // 列出这张表所有字段
         if (attr.aggType != COUNT_AGG) {
           return RC::SQL_SYNTAX;

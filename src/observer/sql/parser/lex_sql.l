@@ -37,7 +37,7 @@ DAY              [0]{0,1}[1-9]|[1-2][0-9]|[3][0-1]
 
 {WHITE_SAPCE}                           // ignore whitespace
 \n																						 ;
-
+[1]                                                RETURN_TOKEN(COUNT_1);
 [\-]?{DIGIT}+					                   yylval->number=atoi(yytext); RETURN_TOKEN(NUMBER);
 [\-]?{DIGIT}+{DOT}{DIGIT}+				       yylval->floats=(float)(atof(yytext)); RETURN_TOKEN(FLOAT);
 

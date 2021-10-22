@@ -107,6 +107,7 @@ ParserContext *get_context(yyscan_t scanner)
         AVG
         MIN
         MAX
+        COUNT_1
 
 %union {
   struct _Attr *attr;
@@ -591,9 +592,9 @@ agg_attr:
                         relation_agg_init(&agg, NULL, "*", COUNT_AGG);
                         selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
         	}
-        	| COUNT LBRACE "1" RBRACE agg_list{
+        	| COUNT LBRACE COUNT_1 RBRACE agg_list{
         		AggAttr agg;
-                        relation_agg_init(&agg, NULL, "*", COUNT_AGG);
+                        relation_agg_init(&agg, NULL, "1", COUNT_AGG);
                         selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
         	}
         	| MAX LBRACE ID RBRACE agg_list{
@@ -625,9 +626,9 @@ agg_list:
                 relation_agg_init(&agg, NULL, "*", COUNT_AGG);
                 selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
 	}
-	| COMMA COUNT LBRACE "1" RBRACE agg_list{
+	| COMMA COUNT LBRACE COUNT_1 RBRACE agg_list{
 		AggAttr agg;
-                relation_agg_init(&agg, NULL, "*", COUNT_AGG);
+                relation_agg_init(&agg, NULL, "1", COUNT_AGG);
                 selects_append_aggregation(&CONTEXT->ssql->sstr.selection, &agg);
 	}
 	| COMMA MAX LBRACE ID RBRACE agg_list{
