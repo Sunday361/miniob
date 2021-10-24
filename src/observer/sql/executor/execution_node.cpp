@@ -141,5 +141,119 @@ RC AggregateExeNode::execute(TupleSet &tuple_set) {
   return RC::SUCCESS;
 }
 
+JoinExeNode::JoinExeNode() {}
+
+JoinExeNode::~JoinExeNode() noexcept {}
+
+RC JoinExeNode::init(Trx *trx, std::vector<ExecutionNode*>&& childNodes,
+        std::vector<Condition> &&conditions) {
+  trx_ = trx;
+  conditions_ = std::move(conditions);
+  childNodes_ = std::move(childNodes);
+  return RC::SUCCESS;
+}
+
+RC JoinExeNode::execute(TupleSet &tuple_set) {
+  TupleSet leftTupleSet, rightTupleSet;
+  childNodes_[0]->execute(leftTupleSet);
+  childNodes_[1]->execute(rightTupleSet);
+  TupleSchema left_schema = childNodes_[0]->getOutputSchema();
+  TupleSchema right_schema = childNodes_[1]->getOutputSchema();
+  std::stringstream ss;
+
+  left_schema.print(ss);
+  right_schema.print(ss);
+  LOG_INFO("input %s %d %d", ss.str().c_str(), leftTupleSet.size(), rightTupleSet.size());
+  for (auto& field : left_schema.fields()){
+    tupleSchema_.add_if_not_exists(field.type(), field.table_name(), field.field_name());
+  }
+
+  for (auto& field : right_schema.fields()){
+    tupleSchema_.add_if_not_exists(field.type(), field.table_name(), field.field_name());
+  }
+  ss.clear();
+  tupleSchema_.print(ss);
+
+  tuple_set.clear();
+  tuple_set.set_schema(tupleSchema_);
+
+  std::vector<int> idx_left;
+  std::vector<int> idx_right;
+  for (int i = 0; i < conditions_.size(); i++) {
+
+    for (int j = 0; j < left_schema.fields().size(); j++) {
+      if (0 == strcmp(left_schema.field(j).table_name(), conditions_[i].left_attr.relation_name) &&
+          0 == strcmp(left_schema.field(j).field_name(), conditions_[i].left_attr.attribute_name)) {
+        for (int k = 0; k < right_schema.fields().size(); k++) {
+          if (0 == strcmp(right_schema.field(k).table_name(), conditions_[i].right_attr.relation_name) &&
+              0 == strcmp(right_schema.field(k).field_name(), conditions_[i].right_attr.attribute_name)) {
+           idx_left.push_back(j); idx_right.push_back(k);
+          }
+        }
+      }
+
+      if (0 == strcmp(left_schema.field(j).table_name(), conditions_[i].right_attr.relation_name) &&
+          0 == strcmp(left_schema.field(j).field_name(), conditions_[i].right_attr.attribute_name)) {
+        for (int k = 0; k < right_schema.fields().size(); k++) {
+          if (0 == strcmp(right_schema.field(k).table_name(), conditions_[i].left_attr.relation_name) &&
+              0 == strcmp(right_schema.field(k).field_name(), conditions_[i].left_attr.attribute_name)) {
+            idx_left.push_back(j); idx_right.push_back(k);
+          }
+        }
+      }
+    }
+
+    LOG_INFO("l_idx r_idx %d %d", idx_left.back(), idx_right.back());
+  }
+  for (int i = 0; i < leftTupleSet.size(); i++) {
+    for (int j = 0; j < rightTupleSet.size(); j++) {
+      if (cmp(idx_left, idx_right, leftTupleSet.get(i), rightTupleSet.get(j))) {
+        Tuple output;
+
+        for (auto& field : leftTupleSet.get(i).values()) {
+          output.add(field);
+        }
+        for (auto& field : rightTupleSet.get(j).values()) {
+          output.add(field);
+        }
+        tuple_set.add(std::move(output));
+      }
+    }
+  }
+
+  LOG_INFO("output %s %d", ss.str().c_str(), tuple_set.size());
+}
+
+bool JoinExeNode::cmp(std::vector<int>& idx_left, std::vector<int>& idx_right,
+                      const Tuple& leftTuple, const Tuple& rightTuple) const {
+  bool ans = true;
+  for (int k = 0; k < conditions_.size(); k++) {
+    switch (conditions_[k].comp) {
+      case EQUAL_TO:
+        ans &= (leftTuple.get(idx_left[k]).compare(rightTuple.get(idx_right[k])) == 0);
+        break;
+      case LESS_EQUAL:
+        ans &= (leftTuple.get(idx_left[k]).compare(rightTuple.get(idx_right[k])) <= 0);
+        break;
+      case NOT_EQUAL:
+        ans &= (leftTuple.get(idx_left[k]).compare(rightTuple.get(idx_right[k])) != 0);
+        break;
+      case LESS_THAN:
+        ans &= (leftTuple.get(idx_left[k]).compare(rightTuple.get(idx_right[k])) < 0);
+        break;
+      case GREAT_EQUAL:
+        ans &= (leftTuple.get(idx_left[k]).compare(rightTuple.get(idx_right[k])) >= 0);
+        break;
+      case GREAT_THAN:
+        ans &= (leftTuple.get(idx_left[k]).compare(rightTuple.get(idx_right[k])) > 0);
+        break;
+      case NO_OP:
+        break;
+    }
+  }
+  return ans;
+}
+
+
 
 

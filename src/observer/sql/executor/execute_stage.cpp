@@ -12,25 +12,27 @@ See the Mulan PSL v2 for more details. */
 // Created by Longda on 2021/4/13.
 //
 
-#include <string>
-#include <sstream>
-
 #include "execute_stage.h"
 
+#include <functional>
+#include <map>
+#include <sstream>
+#include <string>
+
 #include "common/io/io.h"
+#include "common/lang/string.h"
 #include "common/log/log.h"
 #include "common/seda/timer_stage.h"
-#include "common/lang/string.h"
-#include "session/session.h"
-#include "event/storage_event.h"
-#include "event/sql_event.h"
-#include "event/session_event.h"
 #include "event/execution_plan_event.h"
+#include "event/session_event.h"
+#include "event/sql_event.h"
+#include "event/storage_event.h"
+#include "session/session.h"
 #include "sql/executor/execution_node.h"
 #include "sql/executor/tuple.h"
+#include "storage/common/condition_filter.h"
 #include "storage/common/table.h"
 #include "storage/default/default_handler.h"
-#include "storage/common/condition_filter.h"
 #include "storage/trx/trx.h"
 
 using namespace common;
@@ -124,6 +126,7 @@ void ExecuteStage::handle_request(common::StageEvent *event) {
   switch (sql->flag) {
     case SCF_JOIN: {
       LOG_INFO("execute inner join");
+      do_join(current_db, sql, exe_event->sql_event()->session_event());
       exe_event->done_immediate();
     }
     break;
@@ -134,20 +137,31 @@ void ExecuteStage::handle_request(common::StageEvent *event) {
     }
     break;
     case SCF_SELECT: { // select
+      LOG_INFO("execute select");
       do_select(current_db, sql, exe_event->sql_event()->session_event());
       exe_event->done_immediate();
     }
     break;
     case SCF_INSERT:
+      LOG_INFO("SCF_INSERT");
     case SCF_UPDATE:
+      LOG_INFO("SCF_UPDATE");
     case SCF_DELETE:
+      LOG_INFO("SCF_DELETE");
     case SCF_CREATE_TABLE:
+      LOG_INFO("SCF_CREATE_TABLE");
     case SCF_SHOW_TABLES:
+      LOG_INFO("SCF_SHOW_TABLES");
     case SCF_DESC_TABLE:
+      LOG_INFO("SCF_DESC_TABLE");
     case SCF_DROP_TABLE:
+      LOG_INFO("SCF_DROP_TABLE");
     case SCF_CREATE_INDEX:
-    case SCF_DROP_INDEX: 
+      LOG_INFO("SCF_CREATE_INDEX");
+    case SCF_DROP_INDEX:
+      LOG_INFO("SCF_DROP_INDEX");
     case SCF_LOAD_DATA: {
+      LOG_INFO("SCF_LOAD_DATA");
       StorageEvent *storage_event = new (std::nothrow) StorageEvent(exe_event);
       if (storage_event == nullptr) {
         LOG_ERROR("Failed to new StorageEvent");
@@ -367,8 +381,21 @@ RC create_selection_executor(Trx *trx, const Selects &selects, const char *db, c
       }
       condition_filters.push_back(condition_filter);
     }
-  }
 
+    if (condition.left_is_attr == 1 && condition.right_is_attr == 1) {
+      if (match_table(selects, condition.left_attr.relation_name, table_name)) {
+        RC rc = schema_add_field(table, condition.left_attr.attribute_name, schema);
+        if (rc != RC::SUCCESS) {
+          return rc;
+        }
+      }else if (match_table(selects, condition.right_attr.relation_name, table_name)) {
+        RC rc = schema_add_field(table, condition.right_attr.attribute_name, schema);
+        if (rc != RC::SUCCESS) {
+          return rc;
+        }
+      }
+    }
+  }
   return select_node.init(trx, table, std::move(schema), std::move(condition_filters));
 }
 
@@ -453,12 +480,12 @@ RC ExecuteStage::do_agg(const char *db, Query *sql, SessionEvent *session_event)
       default:
         return RC::INVALID_ARGUMENT;
     }
-    if (i != 0) ss << "|";
+    if (i != 0) ss << " | ";
   }
   ss << "\n";
 
   for (int i = 0; i < values.size(); i++) {
-    if (i != 0) ss << "|";
+    if (i != 0) ss << " | ";
     values[i]->to_string(ss);
   }
   ss << "\n";
@@ -466,4 +493,100 @@ RC ExecuteStage::do_agg(const char *db, Query *sql, SessionEvent *session_event)
   session_event->set_response(ss.str());
   return rc;
 }
+
+ExecutionNode* buildJoinExeNode(Trx* trx, std::list<ExecutionNode *>& select_nodes,
+                                std::list<Condition>& conditions, std::vector<std::string>& table_names) {
+  std::map<std::string, bool> tables;
+  for (auto& name : table_names) {
+    tables.insert({name, false});
+  }
+  tables[table_names[0]] = true;
+  ExecutionNode *n1, *n2;
+  int len = select_nodes.size();
+  for (int i = 1; i < len; i++) {
+    n1 = select_nodes.front(); select_nodes.pop_front();
+    n2 = select_nodes.front(); select_nodes.pop_front();
+    std::vector<Condition> join_conditions;
+    while (!conditions.empty()) {
+      auto& c = conditions.front();
+      if ((tables[std::string(c.left_attr.relation_name)] && std::string(c.right_attr.relation_name) == table_names[i]) ||
+          (tables[std::string(c.right_attr.relation_name)] && std::string(c.left_attr.relation_name) == table_names[i])) {
+        join_conditions.emplace_back(conditions.front());
+        conditions.pop_front();
+      } else {
+        break;
+      }
+    }
+    tables[table_names[i]] = true;
+    JoinExeNode* n = new JoinExeNode();
+    n->init(trx, {n1, n2}, std::move(join_conditions));
+
+    select_nodes.push_front(n);
+  }
+  return select_nodes.back();
+}
+
+RC ExecuteStage::do_join(const char *db, Query *sql, SessionEvent *session_event) {
+
+  RC rc = RC::SUCCESS;
+  Session *session = session_event->get_client()->session;
+  Trx *trx = session->current_trx();
+  const Selects &selects = sql->sstr.selection;
+  // 把所有的表和只跟这张表关联的condition都拿出来，生成最底层的select 执行节点
+  std::list<ExecutionNode *> select_nodes;
+  std::vector<std::string> table_names;
+  for (int i = selects.relation_num - 1; i >= 0; i--) {
+    const char *table_name = selects.relations[i];
+    SelectExeNode *select_node = new SelectExeNode;
+    rc = create_selection_executor(trx, selects, db, table_name, *select_node);
+    if (rc != RC::SUCCESS) {
+      delete select_node;
+      for (ExecutionNode *& tmp_node: select_nodes) {
+        delete tmp_node;
+      }
+      end_trx_if_need(session, trx, false);
+      session_event->set_response("FAILURE\n");
+      return rc;
+    }
+    select_nodes.push_back(select_node);
+    table_names.emplace_back(std::string(table_name));
+  }
+  for (int i = 0; i < table_names.size(); i++) {
+    LOG_INFO("table name is %s", table_names[i].c_str());
+  }
+  std::list<Condition> conditions;
+  for (int i = 0; i < selects.condition_num; i++) {
+    auto& condition = selects.conditions[i];
+    if (condition.left_is_attr == 1 && condition.right_is_attr == 1 &&
+        0 != strcmp(condition.left_attr.relation_name, condition.right_attr.relation_name)) {
+      conditions.emplace_back(condition);
+      LOG_INFO("condition for join is %s %s %s %s", condition.left_attr.relation_name, condition.left_attr.attribute_name,
+               condition.right_attr.relation_name, condition.right_attr.attribute_name);
+    }
+  }
+
+  if (select_nodes.empty()) {
+    LOG_ERROR("No table given");
+    end_trx_if_need(session, trx, false);
+    return RC::SQL_SYNTAX;
+  }
+
+  JoinExeNode* node = (JoinExeNode*)buildJoinExeNode(trx, select_nodes, conditions, table_names);
+  // set outputSchema
+  TupleSet sets;
+  node->execute(sets);
+
+  std::stringstream ss;
+  sets.print(ss);
+  session_event->set_response(ss.str());
+  end_trx_if_need(session, trx, true);
+  return rc;
+}
+
+
+
+
+
+
+
 

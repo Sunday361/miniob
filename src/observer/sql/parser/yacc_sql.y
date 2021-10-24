@@ -355,7 +355,6 @@ select:				/*  select 语句的语法解析树*/
 
 			selects_append_conditions(&CONTEXT->ssql->sstr.selection, CONTEXT->conditions, CONTEXT->condition_length);
 
-			CONTEXT->ssql->flag=SCF_SELECT;//"select";
 			// CONTEXT->ssql->sstr.selection.attr_num = CONTEXT->select_length;
 
 			//临时变量清零
@@ -378,20 +377,6 @@ select:				/*  select 语句的语法解析树*/
          			CONTEXT->select_length=0;
          			CONTEXT->value_length = 0;
          	}
-	|SELECT select_attr FROM ID INNER_JOIN join_list on SEMICOLON
-                 		{
-                 			// CONTEXT->ssql->sstr.selection.relations[CONTEXT->from_length++]=$4;
-                 			selects_append_relation(&CONTEXT->ssql->sstr.selection, $4);
-        				selects_append_conditions(&CONTEXT->ssql->sstr.selection, CONTEXT->conditions, CONTEXT->condition_length);
-                 			CONTEXT->ssql->flag=SCF_JOIN;//"select";
-                 			// CONTEXT->ssql->sstr.selection.attr_num = CONTEXT->select_length;
-
-                 			//临时变量清零
-                 			CONTEXT->condition_length=0;
-                 			CONTEXT->from_length=0;
-                 			CONTEXT->select_length=0;
-                 			CONTEXT->value_length = 0;
-                 	}
 	;
 
 select_attr:
@@ -431,18 +416,22 @@ attr_list:
   	;
 
 rel_list:
-    /* empty */
-    | COMMA ID rel_list {	
+    /* empty */{
+    	CONTEXT->ssql->flag=SCF_SELECT;//"select";
+    }
+    | COMMA ID rel_list {
+    				CONTEXT->ssql->flag=SCF_JOIN;//"select";
 				selects_append_relation(&CONTEXT->ssql->sstr.selection, $2);
 		  }
+	| INNER_JOIN ID on join_list {
+				CONTEXT->ssql->flag=SCF_JOIN;//"select";
+				selects_append_relation(&CONTEXT->ssql->sstr.selection, $2);
+	}
     ;
 join_list:
-	ID INNER_JOIN join_list {
-	selects_append_relation(&CONTEXT->ssql->sstr.selection, $1);
-	}
-	| ID
-	{
-	selects_append_relation(&CONTEXT->ssql->sstr.selection, $1);
+
+	| INNER_JOIN ID on join_list {
+	selects_append_relation(&CONTEXT->ssql->sstr.selection, $2);
 	}
 on:
     | ON condition condition_list {

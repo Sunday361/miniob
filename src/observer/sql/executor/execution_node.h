@@ -30,6 +30,8 @@ public:
   virtual ~ExecutionNode() = default;
 
   virtual RC execute(TupleSet &tuple_set) = 0;
+  virtual void setOutputSchema(TupleSchema&& tuple_schema) = 0;
+  virtual TupleSchema& getOutputSchema() = 0;
 };
 
 class SelectExeNode : public ExecutionNode {
@@ -40,6 +42,10 @@ public:
   RC init(Trx *trx, Table *table, TupleSchema && tuple_schema, std::vector<DefaultConditionFilter *> &&condition_filters);
 
   RC execute(TupleSet &tuple_set) override;
+
+  void setOutputSchema(TupleSchema&& tuple_schema){ }
+  TupleSchema& getOutputSchema() {return tuple_schema_;}
+
 private:
   Trx *trx_ = nullptr;
   Table  * table_;
@@ -57,6 +63,8 @@ class AggregateExeNode : public ExecutionNode {
   RC execute(TupleSet &tuple_set) override;
 
   std::vector<TupleValue*> getValues() const { return values_; }
+  void setOutputSchema(TupleSchema&& tuple_schema){ }
+  TupleSchema& getOutputSchema() {return tupleSchema_;}
  private:
   Trx *trx_ = nullptr;
   Table  *table_;
@@ -64,6 +72,28 @@ class AggregateExeNode : public ExecutionNode {
   std::vector<AggType> aggTypes_;
   std::vector<TupleValue*> values_;
   std::vector<DefaultConditionFilter *> condition_filters_;
+};
+
+class JoinExeNode : public ExecutionNode {
+ public:
+  JoinExeNode();
+  virtual ~JoinExeNode();
+
+  RC init(Trx *trx, std::vector<ExecutionNode*>&& childNodes,
+          std::vector<Condition> &&conditions);
+
+  RC execute(TupleSet &tuple_set) override;
+  void setOutputSchema(TupleSchema&& tuple_schema){ }
+  TupleSchema& getOutputSchema() {return tupleSchema_;}
+
+  bool cmp(std::vector<int>& idx_left, std::vector<int>& idx_right,
+           const Tuple& leftTuple, const Tuple& rightTuple) const ;
+ private:
+  Trx *trx_ = nullptr;
+  Table  * table_ = nullptr;
+  TupleSchema  tupleSchema_;
+  std::vector<Condition> conditions_;
+  std::vector<ExecutionNode*> childNodes_;
 };
 
 #endif //__OBSERVER_SQL_EXECUTOR_EXECUTION_NODE_H_
