@@ -90,6 +90,8 @@ typedef struct {
   char *relation_name;    // Relation to insert into
   size_t value_num;       // Length of values
   Value values[MAX_NUM];  // values to insert
+  size_t insert_num;      // num of batch insert
+  size_t offsets[MAX_NUM];
 } Inserts;
 
 // struct of delete

@@ -304,13 +304,7 @@ RC ExecuteStage::do_select(const char *db, Query *sql, SessionEvent *session_eve
     // 本次查询了多张表，需要做join操作
   } else {
     // 当前只查询一张表，直接返回结果即可
-    std::string os;
-    if (getAttrRelationName(selects, os)) {
-      ss << os;
-      tuple_sets.front().printWithoutSchema(ss);
-    }else{
-      tuple_sets.front().print(ss);
-    }
+    tuple_sets.front().print(ss);
   }
 
   for (SelectExeNode *& tmp_node: select_nodes) {

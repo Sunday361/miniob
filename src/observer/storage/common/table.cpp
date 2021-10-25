@@ -235,19 +235,14 @@ RC Table::insert_record(Trx *trx, int value_num, const Value *values) {
     return RC::INVALID_ARGUMENT;
   }
 
-  for (int i = 0; i < value_num; i++) {
-    LOG_INFO("type %d", values[i].type);
-  }
-  if (value_num > table_meta_.field_num()) {
-    int count = (value_num + 1)/ table_meta_.field_num();
+  if (value_num > table_meta_.field_num() - 1) {
+    int count = value_num / (table_meta_.field_num() - 1);
 
-    assert(count * table_meta_.field_num() == value_num + 1);
     RC rc = RC::SUCCESS;
     std::vector<char*> records;
-    LOG_INFO("value = %d count = %d meta = %d", value_num, count, table_meta_.field_num());
     for (int i = 0; i < count; i++){
       char *record_data;
-      const Value *cur = values + i * table_meta_.field_num();
+      const Value *cur = values + i * (table_meta_.field_num() - 1);
       rc = make_record(table_meta_.field_num() - 1, cur, record_data);
       if (rc != RC::SUCCESS) {
         LOG_ERROR("Failed to create a record. rc=%d:%s", rc, strrc(rc));
@@ -264,6 +259,15 @@ RC Table::insert_record(Trx *trx, int value_num, const Value *values) {
       record.data = records[i];
       // record.valid = true;
       rc = insert_record(trx, &record);
+      if (rc != RC::SUCCESS) {
+        LOG_ERROR("Failed to insert a record. rc=%d:%s", rc, strrc(rc));
+        for (int j = 0; j < i; j++) {
+          Record record;
+          record.data = records[j];
+          delete_record(trx, &record);
+        }
+        return rc;
+      }
     }
 
     for (auto& record: records) {

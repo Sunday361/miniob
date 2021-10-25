@@ -306,11 +306,14 @@ insert:				/*insert   语句的语法解析树*/
 
 values_list:
 |COMMA LBRACE value value_list RBRACE values_list{
-	CONTEXT->value_length++;
+
 }
 
 value_list:
     /* empty */
+    {
+    	CONTEXT->ssql->sstr.insertion.offsets[CONTEXT->ssql->sstr.insertion.insert_num++] = CONTEXT->value_length;
+    }
     | COMMA value value_list  { 
   		// CONTEXT->values[CONTEXT->value_length++] = *$2;
 	  }
