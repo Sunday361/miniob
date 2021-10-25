@@ -237,6 +237,21 @@ void end_trx_if_need(Session *session, Trx *trx, bool all_right) {
   }
 }
 
+bool getAttrRelationName(const Selects& selects, std::string& os) {
+  for (int i = selects.attr_num - 1; i >= 0; i--) {
+    if (0 == strcmp("*", selects.attributes[i].attribute_name)) {
+      return false;
+    }
+    if (nullptr != selects.attributes[i].relation_name) {
+      os += std::string(selects.attributes[i].relation_name) + ".";
+    }
+    os += std::string(selects.attributes[i].attribute_name);
+    if (i != 0) os += " | ";
+  }
+  os += "\n";
+  return true;
+}
+
 // 这里没有对输入的某些信息做合法性校验，比如查询的列名、where条件中的列名等，没有做必要的合法性校验
 // 需要补充上这一部分. 校验部分也可以放在resolve，不过跟execution放一起也没有关系
 RC ExecuteStage::do_select(const char *db, Query *sql, SessionEvent *session_event) {
@@ -289,7 +304,13 @@ RC ExecuteStage::do_select(const char *db, Query *sql, SessionEvent *session_eve
     // 本次查询了多张表，需要做join操作
   } else {
     // 当前只查询一张表，直接返回结果即可
-    tuple_sets.front().print(ss);
+    std::string os;
+    if (getAttrRelationName(selects, os)) {
+      ss << os;
+      tuple_sets.front().printWithoutSchema(ss);
+    }else{
+      tuple_sets.front().print(ss);
+    }
   }
 
   for (SelectExeNode *& tmp_node: select_nodes) {
@@ -463,19 +484,28 @@ RC ExecuteStage::do_agg(const char *db, Query *sql, SessionEvent *session_event)
   auto values = aggregateExeNode->getValues();
 
   std::stringstream ss;
+
+  auto f = [&](int idx) ->std::string {
+    if (nullptr != selects.aggAttrs[idx].relation_name) {
+      return std::string(selects.aggAttrs[idx].relation_name) + ".";
+    }
+    return "";
+  };
+
+
   for (int i = selects.agg_num - 1; i >= 0; i--) {
     switch (selects.aggAttrs[i].aggType) {
       case COUNT_AGG:
-        ss << "count(" << selects.aggAttrs[i].attribute_name << ")";
+        ss << "count(" << f(i) << selects.aggAttrs[i].attribute_name << ")";
         break;
       case MIN_AGG:
-        ss << "min(" << selects.aggAttrs[i].attribute_name << ")";
+        ss << "min(" << f(i) << selects.aggAttrs[i].attribute_name << ")";
         break;
       case MAX_AGG:
-        ss << "max(" << selects.aggAttrs[i].attribute_name << ")";
+        ss << "max(" << f(i) << selects.aggAttrs[i].attribute_name << ")";
         break;
       case AVG_AGG:
-        ss << "avg(" << selects.aggAttrs[i].attribute_name << ")";
+        ss << "avg(" << f(i) << selects.aggAttrs[i].attribute_name << ")";
         break;
       default:
         return RC::INVALID_ARGUMENT;
@@ -623,8 +653,13 @@ RC ExecuteStage::do_join(const char *db, Query *sql, SessionEvent *session_event
 
       outputs.add(std::move(outputTuple));
     }
-
-    outputs.print(ss);
+    std::string os;
+    if (getAttrRelationName(selects, os)) {
+      ss << os;
+      outputs.printWithoutSchema(ss);
+    }else {
+      outputs.print(ss);
+    }
   }else {
     sets.print(ss);
   }
@@ -633,6 +668,7 @@ RC ExecuteStage::do_join(const char *db, Query *sql, SessionEvent *session_event
   end_trx_if_need(session, trx, true);
   return rc;
 }
+
 
 
 

@@ -235,6 +235,42 @@ RC Table::insert_record(Trx *trx, int value_num, const Value *values) {
     return RC::INVALID_ARGUMENT;
   }
 
+  for (int i = 0; i < value_num; i++) {
+    LOG_INFO("type %d", values[i].type);
+  }
+  if (value_num > table_meta_.field_num()) {
+    int count = (value_num + 1)/ table_meta_.field_num();
+
+    assert(count * table_meta_.field_num() == value_num + 1);
+    RC rc = RC::SUCCESS;
+    std::vector<char*> records;
+    LOG_INFO("value = %d count = %d meta = %d", value_num, count, table_meta_.field_num());
+    for (int i = 0; i < count; i++){
+      char *record_data;
+      const Value *cur = values + i * table_meta_.field_num();
+      rc = make_record(table_meta_.field_num() - 1, cur, record_data);
+      if (rc != RC::SUCCESS) {
+        LOG_ERROR("Failed to create a record. rc=%d:%s", rc, strrc(rc));
+        for (auto& record: records) {
+          delete[] record;
+        }
+        return rc;
+      }
+      records.emplace_back(record_data);
+    }
+
+    for (int i = 0; i < count; i++) {
+      Record record;
+      record.data = records[i];
+      // record.valid = true;
+      rc = insert_record(trx, &record);
+    }
+
+    for (auto& record: records) {
+      delete[] record;
+    }
+    return rc;
+  }
   char *record_data;
   RC rc = make_record(value_num, values, record_data);
   if (rc != RC::SUCCESS) {

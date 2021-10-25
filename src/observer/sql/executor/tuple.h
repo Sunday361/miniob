@@ -140,6 +140,8 @@ public:
   const std::vector<Tuple> &tuples() const;
 
   void print(std::ostream &os) const;
+  void printWithoutSchema(std::ostream &os) const;
+
 public:
   const TupleSchema &schema() const {
     return schema_;

@@ -186,6 +186,19 @@ void TupleSet::print(std::ostream &os) const {
   }
 }
 
+void TupleSet::printWithoutSchema(std::ostream &os) const {
+  for (const Tuple &item : tuples_) {
+    const std::vector<std::shared_ptr<TupleValue>> &values = item.values();
+    for (std::vector<std::shared_ptr<TupleValue>>::const_iterator iter = values.begin(), end = --values.end();
+         iter != end; ++iter) {
+      (*iter)->to_string(os);
+      os << " | ";
+    }
+    values.back()->to_string(os);
+    os << std::endl;
+  }
+}
+
 void TupleSet::set_schema(const TupleSchema &schema) {
   schema_ = schema;
 }
