@@ -554,6 +554,27 @@ RC ExecuteStage::do_join(const char *db, Query *sql, SessionEvent *session_event
   for (int i = 0; i < table_names.size(); i++) {
     LOG_INFO("table name is %s", table_names[i].c_str());
   }
+  TupleSet outputs;
+  TupleSchema outputSchema;
+  bool isInEqualOut = false;
+  for (int i = selects.attr_num - 1; i >= 0; i--) {
+    auto attr = selects.attributes[i];
+    if (0 == strcmp("*", attr.attribute_name)) {
+      isInEqualOut = true;
+      break;
+    }
+    for (int j = selects.relation_num - 1; j >= 0; j--) {
+      const char *table_name = selects.relations[j];
+      Table *table = DefaultHandler::get_default().find_table(db, table_name);
+      if (nullptr == attr.relation_name || 0 == strcmp(table_name, attr.relation_name)) {
+        RC rc = schema_add_field(table, attr.attribute_name, outputSchema);
+        if (rc != RC::SUCCESS) {
+          return rc;
+        }
+      }
+    }
+  }
+
   std::list<Condition> conditions;
   for (int i = 0; i < selects.condition_num; i++) {
     auto& condition = selects.conditions[i];
@@ -573,11 +594,41 @@ RC ExecuteStage::do_join(const char *db, Query *sql, SessionEvent *session_event
 
   JoinExeNode* node = (JoinExeNode*)buildJoinExeNode(trx, select_nodes, conditions, table_names);
   // set outputSchema
+
   TupleSet sets;
   node->execute(sets);
-
   std::stringstream ss;
-  sets.print(ss);
+  if (!isInEqualOut) {
+    outputs.clear();
+    outputs.set_schema(outputSchema);
+
+    TupleSchema inputSchema = sets.schema();
+
+    std::vector<int> ans(outputSchema.fields().size(), -1);
+
+    for (int i = 0; i < inputSchema.fields().size(); i++) {
+      for (int j = 0; j < outputSchema.fields().size(); j++) {
+        if (inputSchema.field(i).to_string() == outputSchema.field(j).to_string()) {
+          ans[j] = i;
+        }
+      }
+    }
+
+    for (auto& tuple : sets.tuples()) {
+      auto outputTuple = Tuple();
+      for (int i = 0; i < ans.size(); i++) {
+        LOG_INFO("%d", ans[i]);
+        outputTuple.add(tuple.get_pointer(ans[i]));
+      }
+
+      outputs.add(std::move(outputTuple));
+    }
+
+    outputs.print(ss);
+  }else {
+    sets.print(ss);
+  }
+
   session_event->set_response(ss.str());
   end_trx_if_need(session, trx, true);
   return rc;
