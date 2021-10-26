@@ -587,7 +587,7 @@ RC ExecuteStage::do_join(const char *db, Query *sql, SessionEvent *session_event
   bool isInEqualOut = false;
   for (int i = selects.attr_num - 1; i >= 0; i--) {
     auto attr = selects.attributes[i];
-    if (0 == strcmp("*", attr.attribute_name)) {
+    if (0 == strcmp("*", attr.attribute_name) && outputSchema.fields().empty()) {
       isInEqualOut = true;
       break;
     }
@@ -603,7 +603,10 @@ RC ExecuteStage::do_join(const char *db, Query *sql, SessionEvent *session_event
       }
     }
   }
-
+  if (outputSchema.fields().empty()) {
+    session_event->set_response("FAILURE\n");
+    return RC::SCHEMA_TABLE_NOT_EXIST;
+  }
   std::list<Condition> conditions;
   for (int i = 0; i < selects.condition_num; i++) {
     auto& condition = selects.conditions[i];
