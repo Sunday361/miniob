@@ -428,6 +428,7 @@ RC ExecuteStage::do_agg(const char *db, Query *sql, SessionEvent *session_event)
   std::vector<AggType> types(selects.agg_num, NO_AGG);
   if (nullptr == table) {
     LOG_WARN("No such table [%s] in db [%s]", table_name, db);
+    session_event->set_response("FAILURE\n");
     return RC::SCHEMA_TABLE_NOT_EXIST;
   }
 
@@ -438,6 +439,7 @@ RC ExecuteStage::do_agg(const char *db, Query *sql, SessionEvent *session_event)
       if (0 == strcmp("*", attr.attribute_name) || 0 == strcmp("1", attr.attribute_name)) {
         // 列出这张表所有字段
         if (attr.aggType != COUNT_AGG) {
+          session_event->set_response("FAILURE\n");
           return RC::SQL_SYNTAX;
         }
         TupleSchema::from_table(table, schema);
@@ -445,6 +447,7 @@ RC ExecuteStage::do_agg(const char *db, Query *sql, SessionEvent *session_event)
         // 列出这张表相关字段
         RC rc = schema_add_field_agg(table, attr.attribute_name, schema);
         if (rc != RC::SUCCESS) {
+          session_event->set_response("FAILURE\n");
           return rc;
         }
       }
@@ -467,6 +470,7 @@ RC ExecuteStage::do_agg(const char *db, Query *sql, SessionEvent *session_event)
         for (DefaultConditionFilter * &filter : condition_filters) {
           delete filter;
         }
+        session_event->set_response("FAILURE\n");
         return rc;
       }
       condition_filters.push_back(condition_filter);
@@ -479,27 +483,27 @@ RC ExecuteStage::do_agg(const char *db, Query *sql, SessionEvent *session_event)
 
   std::stringstream ss;
 
-  auto f = [&](int idx) ->std::string {
-    if (nullptr != selects.aggAttrs[idx].relation_name) {
-      return std::string(selects.aggAttrs[idx].relation_name) + ".";
-    }
-    return "";
-  };
+//  auto f = [&](int idx) ->std::string {
+//    if (nullptr != selects.aggAttrs[idx].relation_name) {
+//      return std::string(selects.aggAttrs[idx].relation_name) + ".";
+//    }
+//    return "";
+//  };
 
 
   for (int i = selects.agg_num - 1; i >= 0; i--) {
     switch (selects.aggAttrs[i].aggType) {
       case COUNT_AGG:
-        ss << "count(" << f(i) << selects.aggAttrs[i].attribute_name << ")";
+        ss << "count(" << selects.aggAttrs[i].attribute_name << ")";
         break;
       case MIN_AGG:
-        ss << "min(" << f(i) << selects.aggAttrs[i].attribute_name << ")";
+        ss << "min(" << selects.aggAttrs[i].attribute_name << ")";
         break;
       case MAX_AGG:
-        ss << "max(" << f(i) << selects.aggAttrs[i].attribute_name << ")";
+        ss << "max(" << selects.aggAttrs[i].attribute_name << ")";
         break;
       case AVG_AGG:
-        ss << "avg(" << f(i) << selects.aggAttrs[i].attribute_name << ")";
+        ss << "avg(" << selects.aggAttrs[i].attribute_name << ")";
         break;
       default:
         return RC::INVALID_ARGUMENT;
@@ -593,6 +597,7 @@ RC ExecuteStage::do_join(const char *db, Query *sql, SessionEvent *session_event
       if (nullptr == attr.relation_name || 0 == strcmp(table_name, attr.relation_name)) {
         RC rc = schema_add_field(table, attr.attribute_name, outputSchema);
         if (rc != RC::SUCCESS) {
+          session_event->set_response("FAILURE\n");
           return rc;
         }
       }
