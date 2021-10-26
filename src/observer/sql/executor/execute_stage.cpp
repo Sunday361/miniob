@@ -603,7 +603,7 @@ RC ExecuteStage::do_join(const char *db, Query *sql, SessionEvent *session_event
       }
     }
   }
-  if (outputSchema.fields().empty()) {
+  if (!isInEqualOut && outputSchema.fields().empty()) {
     session_event->set_response("FAILURE\n");
     return RC::SCHEMA_TABLE_NOT_EXIST;
   }
