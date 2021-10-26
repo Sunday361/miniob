@@ -99,6 +99,11 @@ void date_init_string(Value *value, const char *v) {
   int date = a[0] * 10000 + a[1] * 100 + a[2];
   memmove(value->data, &date, 4);
 }
+
+void value_init_null(Value *value) {
+  value->data = nullptr;
+}
+
 void value_destroy(Value *value) {
   value->type = UNDEFINED;
   free(value->data);
@@ -136,10 +141,11 @@ void condition_destroy(Condition *condition) {
   }
 }
 
-void attr_info_init(AttrInfo *attr_info, const char *name, AttrType type, size_t length) {
+void attr_info_init(AttrInfo *attr_info, const char *name, AttrType type, size_t length, unsigned char isNullable) {
   attr_info->name = strdup(name);
   attr_info->type = type;
-  attr_info->length = 4;
+  attr_info->length = 5;
+  attr_info->isNullable = isNullable;
 }
 void attr_info_destroy(AttrInfo *attr_info) {
   free(attr_info->name);

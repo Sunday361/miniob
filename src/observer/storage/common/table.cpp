@@ -664,6 +664,9 @@ RC Table::update_record(Trx *trx, Record *record, const char *attribute_name, co
   if (meta == nullptr) {
     return RC::SCHEMA_FIELD_NOT_EXIST;
   }
+  if (meta->type() != value->type) {
+    return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+  }
 
   auto indexMeta = table_meta_.find_index_by_field(attribute_name);
   if (nullptr != indexMeta) {

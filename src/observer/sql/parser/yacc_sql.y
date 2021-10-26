@@ -109,6 +109,9 @@ ParserContext *get_context(yyscan_t scanner)
         MAX
         COUNT_1
         INNER_JOIN
+        NULLABLE
+        NULLT
+        NOT_NULLT
 
 %union {
   struct _Attr *attr;
@@ -128,8 +131,9 @@ ParserContext *get_context(yyscan_t scanner)
 %token <string> STAR
 %token <string> STRING_V
 %token <string> DATE
-//非终结符
 
+//非终结符
+%type <number> nullable;
 %type <number> type;
 %type <condition1> condition;
 %type <value1> value;
@@ -246,10 +250,10 @@ attr_def_list:
     ;
     
 attr_def:
-    ID_get type LBRACE number RBRACE 
+    ID_get type LBRACE number RBRACE nullable
 		{
 			AttrInfo attribute;
-			attr_info_init(&attribute, CONTEXT->id, $2, $4);
+			attr_info_init(&attribute, CONTEXT->id, $2, $4, $6);
 			create_table_append_attribute(&CONTEXT->ssql->sstr.create_table, &attribute);
 			// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name =(char*)malloc(sizeof(char));
 			// strcpy(CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name, CONTEXT->id); 
@@ -257,10 +261,10 @@ attr_def:
 			// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].length = $4;
 			CONTEXT->value_length++;
 		}
-    |ID_get type
+    |ID_get type nullable
 		{
 			AttrInfo attribute;
-			attr_info_init(&attribute, CONTEXT->id, $2, 4);
+			attr_info_init(&attribute, CONTEXT->id, $2, 4, $3);
 			create_table_append_attribute(&CONTEXT->ssql->sstr.create_table, &attribute);
 			// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name=(char*)malloc(sizeof(char));
 			// strcpy(CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name, CONTEXT->id); 
@@ -269,6 +273,18 @@ attr_def:
 			CONTEXT->value_length++;
 		}
     ;
+
+nullable:
+{
+$$ = 0;
+}
+| NOT_NULLT {
+$$ = 0;
+}
+| NULLABLE {
+$$ = 1;
+}
+
 number:
 		NUMBER {$$ = $1;}
 		;
@@ -333,6 +349,9 @@ value:
     		$1 = substr($1,1,strlen($1)-1);
       		date_init_string(&CONTEXT->values[CONTEXT->value_length++], $1);
     		}
+    |NULLT {
+      		value_init_null(&CONTEXT->values[CONTEXT->value_length++]);
+      		    }
     ;
     
 delete:		/*  delete 语句的语法解析树*/

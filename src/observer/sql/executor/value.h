@@ -127,7 +127,8 @@ public:
 
   int compare(const TupleValue &other) const override {
     const StringValue &string_other = (const StringValue &)other;
-    return strcmp(value_.c_str(), string_other.value_.c_str());
+    if (value_ == string_other.value_) return 0;
+    return value_ > string_other.value_ ? 1: -1;
   }
 
   void addValue(const TupleValue &other) override { // should not be used
