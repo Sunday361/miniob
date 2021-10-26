@@ -587,8 +587,12 @@ RC ExecuteStage::do_join(const char *db, Query *sql, SessionEvent *session_event
   bool isInEqualOut = false;
   for (int i = selects.attr_num - 1; i >= 0; i--) {
     auto attr = selects.attributes[i];
-    if (0 == strcmp("*", attr.attribute_name) && outputSchema.fields().empty()) {
+    /*for avoid select *,id ... */
+    if (0 == strcmp("*", attr.attribute_name) && selects.attr_num == 1) {
       isInEqualOut = true;
+      break;
+    }else if (0 == strcmp("*", attr.attribute_name)) {
+      outputSchema.clear();
       break;
     }
     for (int j = selects.relation_num - 1; j >= 0; j--) {
@@ -649,7 +653,6 @@ RC ExecuteStage::do_join(const char *db, Query *sql, SessionEvent *session_event
     for (auto& tuple : sets.tuples()) {
       auto outputTuple = Tuple();
       for (int i = 0; i < ans.size(); i++) {
-        LOG_INFO("%d", ans[i]);
         outputTuple.add(tuple.get_pointer(ans[i]));
       }
 

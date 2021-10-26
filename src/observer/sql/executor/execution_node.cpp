@@ -227,8 +227,7 @@ RC JoinExeNode::execute(TupleSet &tuple_set) {
       }
     }
   }
-
-  LOG_INFO("output %s %d", ss.str().c_str(), tuple_set.size());
+  return RC::SUCCESS;
 }
 
 bool JoinExeNode::cmp(std::vector<int>& idx_left, std::vector<int>& idx_right,
