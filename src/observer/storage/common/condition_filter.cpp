@@ -159,12 +159,8 @@ bool DefaultConditionFilter::filter(const Record &rec) const
       cmp_result = left - right == 0 ? 0 : (left - right > 0 ? 1:-1);
     } break;
     case DATES: {
-      int idx = 0; int left = 0, right = 0;
-      while (left == right && idx < 3) {
-        left = *((int *)left_value + idx);
-        right = *((int *)right_value + idx);
-        idx++;
-      }
+      int left = *(int *)left_value;
+      int right = *(int *)right_value;
       cmp_result = left - right;
     } break;
     default: {

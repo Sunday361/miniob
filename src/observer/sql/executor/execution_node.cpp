@@ -78,12 +78,16 @@ RC AggregateExeNode::init(Trx *trx, Table *table, TupleSchema &tupleSchema,
           values_.emplace_back(new FloatValue(FLOAT::max()));
         else if (tupleSchema.field(i).type() == INTS)
           values_.emplace_back(new IntValue(INT::max()));
+        else if (tupleSchema.field(i).type() == CHARS)
+          values_.emplace_back(new StringValue("\xff\xff\xff\xff"));
         break;
       case MAX_AGG:
         if (tupleSchema.field(i).type() == FLOATS)
           values_.emplace_back(new FloatValue(FLOAT::min()));
         else if (tupleSchema.field(i).type() == INTS)
           values_.emplace_back(new IntValue(INT::min()));
+        else if (tupleSchema.field(i).type() == CHARS)
+          values_.emplace_back(new StringValue("\x00\x00\x00\x00"));
         break;
       case AVG_AGG:
         if (tupleSchema.field(i).type() == FLOATS)
@@ -108,6 +112,9 @@ RC AggregateExeNode::execute(TupleSet &tuple_set) {
   if (rc != RC::SUCCESS) {
     return rc;
   }
+  std::stringstream os;
+  tuple_set.print(os);
+  LOG_INFO("%s", os.str().c_str());
   for (auto& tuple : tuple_set.tuples()) {
     for (int i = 0; i < aggTypes_.size(); i++) {
       switch (aggTypes_[i]) {
