@@ -54,46 +54,57 @@ RC SelectExeNode::execute(TupleSet &tuple_set) {
   return table_->scan_record(trx_, &condition_filter, -1, (void *)&converter, record_reader);
 }
 
-AggregateExeNode::AggregateExeNode(): table_(nullptr) {
-
-}
-
 AggregateExeNode::~AggregateExeNode() noexcept {
 
 }
 
-RC AggregateExeNode::init(Trx *trx, Table *table, TupleSchema &tupleSchema,
-        std::vector<AggType>& aggTypes, std::vector<DefaultConditionFilter *> &&condition_filters){
+RC AggregateExeNode::init(Trx *trx, TupleSchema &tupleSchema, TupleSchema &group,
+        std::vector<AggType>& aggTypes, ExecutionNode* child){
   trx_ = trx;
-  table_ = table;
-  tupleSchema_ = tupleSchema;
+  tupleSchema_ = tupleSchema; // for group by if empty means no group by
   aggTypes_ = aggTypes;
-  condition_filters_ = condition_filters;
-  for (size_t i = 0; i < aggTypes.size(); i++) {
-    switch (aggTypes[i]) {
+  childNode_ = child;
+
+  if (!group.fields().empty()) {
+
+  }
+  return RC::SUCCESS;
+}
+
+RC AggregateExeNode::initHash(bool isGroup, const Key& key) {
+  std::vector<TupleValue*>* v;
+  if (!isGroup) {
+    v = &values_;
+  }else {
+    gvalues_.insert({key, std::vector<TupleValue*>()});
+    v = &gvalues_[key];
+  }
+  for (size_t i = 0; i < aggTypes_.size(); i++) {
+    switch (aggTypes_[i]) {
       case COUNT_AGG:
-        values_.emplace_back(new IntValue(0)); break;
+        v->emplace_back(new IntValue(0));
+        break;
       case MIN_AGG:
-        if (tupleSchema.field(i).type() == FLOATS)
-          values_.emplace_back(new FloatValue(FLOAT::max()));
-        else if (tupleSchema.field(i).type() == INTS)
-          values_.emplace_back(new IntValue(INT::max()));
-        else if (tupleSchema.field(i).type() == CHARS)
-          values_.emplace_back(new StringValue("\xff\xff\xff\xff"));
+        if (tupleSchema_.field(i).type() == FLOATS)
+          v->emplace_back(new FloatValue(FLOAT::max()));
+        else if (tupleSchema_.field(i).type() == INTS)
+          v->emplace_back(new IntValue(INT::max()));
+        else if (tupleSchema_.field(i).type() == CHARS)
+          v->emplace_back(new StringValue("\xff\xff\xff\xff"));
         break;
       case MAX_AGG:
-        if (tupleSchema.field(i).type() == FLOATS)
-          values_.emplace_back(new FloatValue(FLOAT::min()));
-        else if (tupleSchema.field(i).type() == INTS)
-          values_.emplace_back(new IntValue(INT::min()));
-        else if (tupleSchema.field(i).type() == CHARS)
-          values_.emplace_back(new StringValue("\x00\x00\x00\x00"));
+        if (tupleSchema_.field(i).type() == FLOATS)
+          v->emplace_back(new FloatValue(FLOAT::min()));
+        else if (tupleSchema_.field(i).type() == INTS)
+          v->emplace_back(new IntValue(INT::min()));
+        else if (tupleSchema_.field(i).type() == CHARS)
+          v->emplace_back(new StringValue("\x00\x00\x00\x00"));
         break;
       case AVG_AGG:
-        if (tupleSchema.field(i).type() == FLOATS)
-          values_.emplace_back(new FloatValue(0));
-        else if (tupleSchema.field(i).type() == INTS)
-          values_.emplace_back(new IntValue(0));
+        if (tupleSchema_.field(i).type() == FLOATS)
+          v->emplace_back(new FloatValue(0));
+        else if (tupleSchema_.field(i).type() == INTS)
+          v->emplace_back(new IntValue(0));
         break;
       default:
         return RC::INVALID_ARGUMENT;
@@ -102,51 +113,110 @@ RC AggregateExeNode::init(Trx *trx, Table *table, TupleSchema &tupleSchema,
   return RC::SUCCESS;
 }
 
-RC AggregateExeNode::execute(TupleSet &tuple_set) {
+RC AggregateExeNode::execute(TupleSet &outputSet) {
+  outputSet.clear();
+  TupleSet tuple_set;
   tuple_set.clear();
-  tuple_set.set_schema(tupleSchema_);
-  CompositeConditionFilter condition_filter;
-  condition_filter.init((const ConditionFilter **)condition_filters_.data(), condition_filters_.size());
-  TupleRecordConverter converter(table_, tuple_set);
-  RC rc = table_->scan_record(trx_, &condition_filter, -1, (void *)&converter, record_reader);
+  TupleSchema outputSchema;
+  outputSchema.append(group_);
+  outputSchema.append(tupleSchema_);
+  outputSet.set_schema(outputSchema);
+  RC rc = childNode_->execute(tuple_set);
   if (rc != RC::SUCCESS) {
     return rc;
   }
-  std::stringstream os;
-  tuple_set.print(os);
-  LOG_INFO("%s", os.str().c_str());
-  for (auto& tuple : tuple_set.tuples()) {
+  LOG_INFO("execute child node");
+  std::vector<int> groups;
+  std::vector<int> aggregations;
+  for (int i = 0; i < group_.fields().size(); i++) {
+    for (int j = 0; j < tuple_set.schema().fields().size(); j++) {
+      if (tuple_set.schema().field(j).to_string() == group_.field(i).to_string()) {
+        groups.push_back(j);
+      }
+    }
+  }
+  for (int i = 0; i < tupleSchema_.fields().size(); i++) {
+    if (0 == strcmp(tupleSchema_.field(i).field_name(), "*") ||
+        0 == strcmp(tupleSchema_.field(i).field_name(), "1")) {
+      aggregations.push_back(0);
+      continue;
+    }
+    for (int j = 0; j < tuple_set.schema().fields().size(); j++) {
+      if (tuple_set.schema().field(j).to_string() == tupleSchema_.field(i).to_string()) {
+        aggregations.push_back(j);
+      }
+    }
+  }
+  MakeKey makeKey(groups);
+
+  for (auto &tuple : tuple_set.tuples()) {
+    std::vector<TupleValue *> &v = values_;
+    auto key = makeKey(tuple);
+    if (groups.empty()) {
+      if (values_.empty()) {
+        initHash(false, key);
+      }
+      v = values_;
+    } else {
+      if (!gvalues_.count(key)) {
+        initHash(true, key);
+      }
+      v = gvalues_[key];
+    }
     for (int i = 0; i < aggTypes_.size(); i++) {
       switch (aggTypes_[i]) {
         case AVG_AGG:
-          values_[i]->addValue(tuple.get(i)); break;
+          v[i]->addValue(tuple.get(aggregations[i]));
+          break;
         case MAX_AGG:
-          if (values_[i]->compare(tuple.get(i)) == -1) {
-            values_[i]->setValue(tuple.get(i));
+          if (v[i]->compare(tuple.get(aggregations[i])) == -1) {
+            v[i]->setValue(tuple.get(aggregations[i]));
           }
           break;
         case MIN_AGG:
-          if (values_[i]->compare(tuple.get(i)) == 1) {
-            values_[i]->setValue(tuple.get(i));
+          if (v[i]->compare(tuple.get(aggregations[i])) == 1) {
+            v[i]->setValue(tuple.get(aggregations[i]));
           }
           break;
         case COUNT_AGG:
-          values_[i]->addValue(IntValue(1)); break;
+          v[i]->addValue(IntValue(1));
+          break;
         case NO_AGG:
           return RC::INVALID_ARGUMENT;
       }
     }
   }
-  for (int i = 0; i < aggTypes_.size(); i++) {
-    if (aggTypes_[i] == AVG_AGG){
-      auto ptr = values_[i];
-      auto num = ptr->getValue();
-      values_[i] = new FloatValue(num / tuple_set.size());
-      delete ptr;
+  LOG_INFO("execute agg");
+  if (groups.empty()) {
+    for (int i = 0; i < aggTypes_.size(); i++) {
+      if (aggTypes_[i] == AVG_AGG) {
+        auto ptr = values_[i];
+        auto num = ptr->getValue();
+        values_[i] = new FloatValue(num / tuple_set.size());
+        delete ptr;
+      }
+    }
+    Tuple tuple;
+    for (int i = 0; i < aggTypes_.size(); i++) {
+      tuple.add(values_[i]);
+    }
+    outputSet.add(std::move(tuple));
+  }else {
+    for (auto& v : gvalues_) {
+      Tuple tuple;
+
+      for (auto& key : v.first.keys_) {
+        tuple.add(key);
+      }
+      for (auto& value : v.second) {
+        tuple.add(value);
+      }
+      outputSet.add(std::move(tuple));
     }
   }
   return RC::SUCCESS;
 }
+
 
 JoinExeNode::JoinExeNode() {}
 

@@ -17,6 +17,7 @@ See the Mulan PSL v2 for more details. */
 
 #include <vector>
 #include <unordered_map>
+#include <map>
 #include <limits>
 #include "storage/common/condition_filter.h"
 #include "sql/executor/tuple.h"
@@ -53,25 +54,54 @@ private:
   std::vector<DefaultConditionFilter *> condition_filters_;
 };
 
+struct Key {
+  std::vector<TupleValue*> keys_;
+  Key(std::vector<TupleValue*>& keys): keys_(keys) {}
+  bool operator<(const Key& other) const {
+    for (int i = 0; i < keys_.size(); i++) {
+      if (keys_[i]->compare(*other.keys_[i]) == 1) {
+        return false;
+      }
+    }
+    return true;
+  }
+};
+
 class AggregateExeNode : public ExecutionNode {
  public:
-  AggregateExeNode();
+  AggregateExeNode() {};
   virtual ~AggregateExeNode();
 
-  RC init(Trx *trx, Table *table, TupleSchema &tupleSchema,
-          std::vector<AggType>& aggTypes, std::vector<DefaultConditionFilter *> &&condition_filters);
+  RC init(Trx *trx, TupleSchema &tupleSchema, TupleSchema &group,
+          std::vector<AggType>& aggTypes, ExecutionNode* child);
   RC execute(TupleSet &tuple_set) override;
 
-  std::vector<TupleValue*> getValues() const { return values_; }
   void setOutputSchema(TupleSchema&& tuple_schema){ }
   TupleSchema& getOutputSchema() {return tupleSchema_;}
+
+  class MakeKey {
+   public:
+    std::vector<int> keys_;
+    MakeKey(std::vector<int>& keys): keys_(keys) {}
+    Key operator()(const Tuple& tuple) const {
+      std::vector<TupleValue*> key;
+      for (int i = 0; i < keys_.size(); i++) {
+        key.push_back(tuple.get_pointer(keys_[i]).get());
+      }
+      return Key(key);
+    }
+  };
+
+  RC initHash(bool isGroup,const Key& key);
+
  private:
   Trx *trx_ = nullptr;
-  Table  *table_;
-  TupleSchema tupleSchema_;
-  std::vector<AggType> aggTypes_;
+  TupleSchema tupleSchema_;    // for agg
+  TupleSchema group_;          // for group
+  std::vector<AggType> aggTypes_; // agg type, one maps one in tupleSchema
   std::vector<TupleValue*> values_;
-  std::vector<DefaultConditionFilter *> condition_filters_;
+  std::map<Key, std::vector<TupleValue*>> gvalues_;
+  ExecutionNode* childNode_ = nullptr;
 };
 
 class JoinExeNode : public ExecutionNode {
