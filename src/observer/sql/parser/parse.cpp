@@ -156,6 +156,10 @@ void selects_init(Selects *selects, ...);
 void selects_append_attribute(Selects *selects, RelAttr *rel_attr) {
   selects->attributes[selects->attr_num++] = *rel_attr;
 }
+void selects_append_groupbys(Selects *selects, RelAttr *rel_attr) {
+  selects->groupbys[selects->groupby_num++] = *rel_attr;
+}
+
 void selects_append_aggregation(Selects *selects, AggAttr *agg_attr) {
   selects->aggAttrs[selects->agg_num++] = *agg_attr;
 }
@@ -187,6 +191,19 @@ void selects_destroy(Selects *selects) {
     condition_destroy(&selects->conditions[i]);
   }
   selects->condition_num = 0;
+
+  for (size_t i = 0; i < selects->agg_num; i++) {
+    relation_agg_destroy(&selects->aggAttrs[i]);
+  }
+  selects->agg_num = 0;
+  for (size_t i = 0; i < selects->groupby_num; i++) {
+    relation_attr_destroy(&selects->groupbys[i]);
+  }
+  selects->groupby_num = 0;
+  for (size_t i = 0; i < selects->orderby_num; i++) {
+    relation_attr_destroy(&selects->orderbys[i]);
+  }
+  selects->orderby_num = 0;
 }
 
 void inserts_init(Inserts *inserts, const char *relation_name, Value values[], size_t value_num) {
@@ -404,7 +421,6 @@ void query_reset(Query *query) {
     case SCF_HELP:
     case SCF_EXIT:
     case SCF_ERROR:
-    case SCF_AGG:
     break;
   }
 }

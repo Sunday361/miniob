@@ -18,6 +18,7 @@ See the Mulan PSL v2 for more details. */
 #include <map>
 #include <sstream>
 #include <string>
+#include <algorithm>
 
 #include "common/io/io.h"
 #include "common/lang/string.h"
@@ -124,21 +125,9 @@ void ExecuteStage::handle_request(common::StageEvent *event) {
   exe_event->push_callback(cb);
 
   switch (sql->flag) {
-    case SCF_JOIN: {
-      LOG_INFO("execute inner join");
-      do_join(current_db, sql, exe_event->sql_event()->session_event());
-      exe_event->done_immediate();
-    }
-    break;
-    case SCF_AGG: { // agg
-      LOG_INFO("execute aggregation");
-      do_agg(current_db, sql, exe_event->sql_event()->session_event());
-      exe_event->done_immediate();
-    }
-    break;
     case SCF_SELECT: { // select
       LOG_INFO("execute select");
-      do_select(current_db, sql, exe_event->sql_event()->session_event());
+      select(current_db, sql, exe_event->sql_event()->session_event());
       exe_event->done_immediate();
     }
     break;
@@ -360,9 +349,6 @@ RC create_selection_executor(Trx *trx, const Selects &selects, const char *db, c
     if (nullptr == attr.relation_name || 0 == strcmp(table_name, attr.relation_name)) {
       if (0 == strcmp("*", attr.attribute_name)) {
         // 列出这张表所有字段
-        if (!schema.fields().empty()) {
-          return RC::SQL_SYNTAX;
-        }
         TupleSchema::from_table(table, schema);
         break; // 没有校验，给出* 之后，再写字段的错误
       } else {
@@ -414,114 +400,6 @@ RC create_selection_executor(Trx *trx, const Selects &selects, const char *db, c
   return select_node.init(trx, table, std::move(schema), std::move(condition_filters));
 }
 
-
-RC ExecuteStage::do_agg(const char *db, Query *sql, SessionEvent *session_event) {
-  RC rc = RC::SUCCESS;
-  Session *session = session_event->get_client()->session;
-  Trx *trx = session->current_trx();
-  const Selects &selects = sql->sstr.selection;
-
-  AggregateExeNode *aggregateExeNode = new AggregateExeNode();
-  const char *table_name = selects.relations[0];
-  TupleSchema schema;
-  Table * table = DefaultHandler::get_default().find_table(db, table_name);
-  std::vector<AggType> types(selects.agg_num, NO_AGG);
-  if (nullptr == table) {
-    LOG_WARN("No such table [%s] in db [%s]", table_name, db);
-    session_event->set_response("FAILURE\n");
-    return RC::SCHEMA_TABLE_NOT_EXIST;
-  }
-
-  for (int i = selects.agg_num - 1; i >= 0; i--) {
-    const AggAttr &attr = selects.aggAttrs[i];
-    types[selects.agg_num - 1 - i] = attr.aggType;
-    if (nullptr == attr.relation_name || 0 == strcmp(table_name, attr.relation_name)) {
-      if (0 == strcmp("*", attr.attribute_name) || 0 == strcmp("1", attr.attribute_name)) {
-        // 列出这张表所有字段
-        if (attr.aggType != COUNT_AGG) {
-          session_event->set_response("FAILURE\n");
-          return RC::SQL_SYNTAX;
-        }
-        TupleSchema::from_table(table, schema);
-      } else {
-        // 列出这张表相关字段
-        RC rc = schema_add_field_agg(table, attr.attribute_name, schema);
-        if (rc != RC::SUCCESS) {
-          session_event->set_response("FAILURE\n");
-          return rc;
-        }
-      }
-    }
-  }
-
-  std::vector<DefaultConditionFilter *> condition_filters;
-  for (int i = 0; i < selects.condition_num; i++) {
-    const Condition &condition = selects.conditions[i];
-    if ((condition.left_is_attr == 0 && condition.right_is_attr == 0) || // 两边都是值
-        (condition.left_is_attr == 1 && condition.right_is_attr == 0 && match_table(selects, condition.left_attr.relation_name, table_name)) ||  // 左边是属性右边是值
-        (condition.left_is_attr == 0 && condition.right_is_attr == 1 && match_table(selects, condition.right_attr.relation_name, table_name)) ||  // 左边是值，右边是属性名
-        (condition.left_is_attr == 1 && condition.right_is_attr == 1 &&
-         match_table(selects, condition.left_attr.relation_name, table_name) && match_table(selects, condition.right_attr.relation_name, table_name)) // 左右都是属性名，并且表名都符合
-    ) {
-      DefaultConditionFilter *condition_filter = new DefaultConditionFilter();
-      RC rc = condition_filter->init(*table, condition);
-      if (rc != RC::SUCCESS) {
-        delete condition_filter;
-        for (DefaultConditionFilter * &filter : condition_filters) {
-          delete filter;
-        }
-        session_event->set_response("FAILURE\n");
-        return rc;
-      }
-      condition_filters.push_back(condition_filter);
-    }
-  }
-  aggregateExeNode->init(trx, table, schema, types, std::move(condition_filters));
-  TupleSet tuple_set;
-  rc = aggregateExeNode->execute(tuple_set);
-  auto values = aggregateExeNode->getValues();
-
-  std::stringstream ss;
-
-//  auto f = [&](int idx) ->std::string {
-//    if (nullptr != selects.aggAttrs[idx].relation_name) {
-//      return std::string(selects.aggAttrs[idx].relation_name) + ".";
-//    }
-//    return "";
-//  };
-
-
-  for (int i = selects.agg_num - 1; i >= 0; i--) {
-    switch (selects.aggAttrs[i].aggType) {
-      case COUNT_AGG:
-        ss << "count(" << selects.aggAttrs[i].attribute_name << ")";
-        break;
-      case MIN_AGG:
-        ss << "min(" << selects.aggAttrs[i].attribute_name << ")";
-        break;
-      case MAX_AGG:
-        ss << "max(" << selects.aggAttrs[i].attribute_name << ")";
-        break;
-      case AVG_AGG:
-        ss << "avg(" << selects.aggAttrs[i].attribute_name << ")";
-        break;
-      default:
-        return RC::INVALID_ARGUMENT;
-    }
-    if (i != 0) ss << " | ";
-  }
-  ss << "\n";
-
-  for (int i = 0; i < values.size(); i++) {
-    if (i != 0) ss << " | ";
-    values[i]->to_string(ss);
-  }
-  ss << "\n";
-
-  session_event->set_response(ss.str());
-  return rc;
-}
-
 ExecutionNode* buildJoinExeNode(Trx* trx, std::list<ExecutionNode *>& select_nodes,
                                 std::list<Condition>& conditions, std::vector<std::string>& table_names) {
   std::map<std::string, bool> tables;
@@ -554,12 +432,87 @@ ExecutionNode* buildJoinExeNode(Trx* trx, std::list<ExecutionNode *>& select_nod
   return select_nodes.back();
 }
 
-RC ExecuteStage::do_join(const char *db, Query *sql, SessionEvent *session_event) {
+std::string getAggAttribute(const char *rel, const char *attr, AggType type) {
+  std::string os = "";
+  switch (type) {
+    case COUNT_AGG: os += "count("; break;
+    case AVG_AGG: os += "avg("; break;
+    case MIN_AGG: os += "min("; break;
+    case MAX_AGG: os += "max("; break;
+    case NO_AGG: os += ""; break;
+  }
+  if (rel != nullptr) {
+    os += std::string(rel);
+    os += ".";
+  }
+  os += std::string(attr);
+  os += ")";
+  return os;
+}
 
+std::string getOutputHead(const Selects &selects) {
+  int relation_num = selects.relation_num;
+  std::stringstream os;
+  if (relation_num == 1) { // no relation_name
+    int k = selects.agg_num - 1;
+    for (int i = selects.attr_num - 1; i >= 0; i--) {
+      if (k >= 0 && (0 == strcmp("*", selects.aggAttrs[k].attribute_name) || 0 == strcmp("1", selects.aggAttrs[k].attribute_name))) {
+        os << getAggAttribute(nullptr, selects.aggAttrs[k].attribute_name, selects.aggAttrs[k].aggType);
+        k--;
+      }else if (k >= 0 && 0 == strcmp(selects.attributes[i].attribute_name, selects.aggAttrs[k].attribute_name)) {
+        os << getAggAttribute(nullptr, selects.aggAttrs[k].attribute_name, selects.aggAttrs[k].aggType);
+        k--;
+      }else {
+        os << std::string(selects.attributes[i].attribute_name);
+      }
+      if (i != 0) os << " | ";
+    }
+  }else {
+    int k = selects.agg_num - 1;
+    for (int i = selects.attr_num - 1; i >= 0; i--) {
+      if (k >= 0 && (0 == strcmp("*", selects.aggAttrs[k].attribute_name) || 0 == strcmp("1", selects.aggAttrs[k].attribute_name))) {
+        os << getAggAttribute(nullptr, selects.aggAttrs[k].attribute_name, selects.aggAttrs[k].aggType);
+        k--;
+      }else if (k >= 0 && 0 == strcmp(selects.attributes[i].relation_name, selects.aggAttrs[k].relation_name) &&
+          0 == strcmp(selects.attributes[i].attribute_name, selects.aggAttrs[k].attribute_name)) {
+        os << getAggAttribute(selects.attributes[i].relation_name, selects.aggAttrs[k].attribute_name, selects.aggAttrs[k].aggType);
+        k--;
+      }else {
+        os << std::string(selects.attributes[i].relation_name) << "." << std::string(selects.attributes[i].attribute_name);
+      }
+      if (i != 0) os << " | ";
+    }
+  }
+  os << "\n";
+  return os.str();
+}
+
+
+RC ExecuteStage::select(const char *db, Query *sql, SessionEvent *session_event) {
   RC rc = RC::SUCCESS;
   Session *session = session_event->get_client()->session;
   Trx *trx = session->current_trx();
   const Selects &selects = sql->sstr.selection;
+  // validation aggregation and group by
+  if (selects.agg_num != 0 && selects.attr_num != selects.agg_num) { // only appear in groupby
+    if (selects.groupby_num == 0 || (selects.groupby_num != selects.attr_num - selects.agg_num)) {
+      return RC::SQL_SYNTAX;
+    }
+    int idx = 0;
+    for (int i = selects.groupby_num - 1; i >= 0; i--) {
+      for (int j = selects.attr_num - 1; j >= 0; j--) {
+        if (0 == strcmp(selects.groupbys[i].relation_name, selects.attributes[j].relation_name) &&
+            0 == strcmp(selects.groupbys[i].attribute_name, selects.attributes[j].attribute_name)) {
+          idx += 1;
+        }
+      }
+    }
+    if (idx != selects.groupby_num) {
+      session_event->set_response("FAILURE\n");
+      return RC::SQL_SYNTAX;
+    }
+  }
+
   // 把所有的表和只跟这张表关联的condition都拿出来，生成最底层的select 执行节点
   std::list<ExecutionNode *> select_nodes;
   std::vector<std::string> table_names;
@@ -579,73 +532,137 @@ RC ExecuteStage::do_join(const char *db, Query *sql, SessionEvent *session_event
     select_nodes.push_back(select_node);
     table_names.emplace_back(std::string(table_name));
   }
-  for (int i = 0; i < table_names.size(); i++) {
-    LOG_INFO("table name is %s", table_names[i].c_str());
-  }
-  TupleSet outputs;
-  TupleSchema outputSchema;
-  bool isInEqualOut = false;
-  for (int i = selects.attr_num - 1; i >= 0; i--) {
-    auto attr = selects.attributes[i];
-    /*for avoid select *,id ... */
-    if (0 == strcmp("*", attr.attribute_name) && selects.attr_num == 1) {
-      isInEqualOut = true;
-      break;
-    }else if (0 == strcmp("*", attr.attribute_name)) {
-      outputSchema.clear();
-      break;
-    }
-    for (int j = selects.relation_num - 1; j >= 0; j--) {
-      const char *table_name = selects.relations[j];
-      Table *table = DefaultHandler::get_default().find_table(db, table_name);
-      if (nullptr == attr.relation_name || 0 == strcmp(table_name, attr.relation_name)) {
-        RC rc = schema_add_field(table, attr.attribute_name, outputSchema);
-        if (rc != RC::SUCCESS) {
-          session_event->set_response("FAILURE\n");
-          return rc;
-        }
-      }
-    }
-  }
-  if (!isInEqualOut && outputSchema.fields().empty()) {
-    session_event->set_response("FAILURE\n");
-    return RC::SCHEMA_TABLE_NOT_EXIST;
-  }
-  std::list<Condition> conditions;
-  for (int i = 0; i < selects.condition_num; i++) {
-    auto& condition = selects.conditions[i];
-    if (condition.left_is_attr == 1 && condition.right_is_attr == 1 &&
-        0 != strcmp(condition.left_attr.relation_name, condition.right_attr.relation_name)) {
-      conditions.emplace_back(condition);
-      LOG_INFO("condition for join is %s %s %s %s", condition.left_attr.relation_name, condition.left_attr.attribute_name,
-               condition.right_attr.relation_name, condition.right_attr.attribute_name);
-    }
-  }
 
   if (select_nodes.empty()) {
     LOG_ERROR("No table given");
     end_trx_if_need(session, trx, false);
+    session_event->set_response("FAILURE\n");
     return RC::SQL_SYNTAX;
   }
 
-  JoinExeNode* node = (JoinExeNode*)buildJoinExeNode(trx, select_nodes, conditions, table_names);
-  // set outputSchema
+  ExecutionNode* node;
+  if (select_nodes.size() == 1) {
+    node = (SelectExeNode*)select_nodes.back();
+  }else {
+    std::list<Condition> conditions;
+    for (int i = 0; i < selects.condition_num; i++) {
+      auto& condition = selects.conditions[i];
+      if (condition.left_is_attr == 1 && condition.right_is_attr == 1 &&
+          0 != strcmp(condition.left_attr.relation_name, condition.right_attr.relation_name)) {
+        conditions.emplace_back(condition);
+      }
+    }
 
+    node = (JoinExeNode*)buildJoinExeNode(trx, select_nodes, conditions, table_names);
+  }
+
+  // group by and aggregation
+
+  if (selects.agg_num != 0) {
+    AggregateExeNode* n = new AggregateExeNode();
+    TupleSchema aggSchema, groupSchema, attrSchema;
+    std::vector<AggType> types;
+    for (int i = selects.agg_num - 1; i >= 0; i--) {
+      Table* table = nullptr;
+      if (selects.aggAttrs[i].relation_name == nullptr) {
+        table = DefaultHandler::get_default().find_table(db, selects.relations[0]);
+      }else {
+        table = DefaultHandler::get_default().find_table(db, selects.aggAttrs[i].relation_name);
+      }
+
+      if (0 != strcmp(selects.aggAttrs[i].attribute_name, "*") &&
+          0 != strcmp(selects.aggAttrs[i].attribute_name, "1")) {
+        rc = schema_add_field_agg(table, selects.aggAttrs[i].attribute_name, aggSchema);
+        if (rc != RC::SUCCESS) {
+          session_event->set_response("FAILURE\n");
+          return rc;
+        }
+      }else {
+        const char *count = "count";
+        aggSchema.add(INTS, count, selects.aggAttrs[i].attribute_name);
+      }
+      types.push_back(selects.aggAttrs[i].aggType);
+    }
+
+    for (int i = selects.groupby_num - 1; i >= 0; i--) {
+      const Table* table;
+      if (selects.groupbys[i].relation_name == nullptr) {
+        table = DefaultHandler::get_default().find_table(db, selects.relations[0]);
+      }else {
+        table = DefaultHandler::get_default().find_table(db, selects.groupbys[i].relation_name);
+      }
+      auto meta = table->table_meta().field(selects.groupbys[i].attribute_name);
+      if (!meta) {
+        session_event->set_response("FAILURE\n");
+        return RC::SQL_SYNTAX;
+      }
+      groupSchema.add(meta->type(), table->name(), selects.groupbys[i].attribute_name);
+    }
+
+    n->init(trx, aggSchema, groupSchema, types, node);
+
+    node = n;
+  }
+  LOG_INFO("init ok");
+  // order by
+  {
+   // Todo: order by
+  }
   TupleSet sets;
   node->execute(sets);
+  LOG_INFO("execute over");
   std::stringstream ss;
-  if (!isInEqualOut) {
+  TupleSet outputs;
+  TupleSchema outputSchema;
+  bool isInEqualOut = false;
+  if (selects.agg_num == 0) {
+    for (int i = selects.attr_num - 1; i >= 0; i--) {
+      auto attr = selects.attributes[i];
+      /* for avoid select *,id ... not in test */
+      if (0 == strcmp("*", attr.attribute_name) && selects.attr_num == 1) {
+        isInEqualOut = true;
+        break;
+      }
+      for (int j = selects.relation_num - 1; j >= 0; j--) {
+        const char *table_name = selects.relations[j];
+        Table *table = DefaultHandler::get_default().find_table(db, table_name);
+        if (nullptr == attr.relation_name || 0 == strcmp(table_name, attr.relation_name)) {
+          RC rc = schema_add_field(table, attr.attribute_name, outputSchema);
+          if (rc != RC::SUCCESS) {
+            session_event->set_response("FAILURE\n");
+            return rc;
+          }
+        }
+      }
+    }
+  }
+  LOG_INFO("set output schema over");
+  if (!isInEqualOut && outputSchema.fields().empty() && selects.agg_num == 0) {
+    session_event->set_response("FAILURE\n");
+    return RC::SCHEMA_TABLE_NOT_EXIST;
+  }
+
+  if (isInEqualOut) {
+    sets.print(ss);
+  } else {
     outputs.clear();
-    outputs.set_schema(outputSchema);
+    if (!outputSchema.fields().empty())
+      outputs.set_schema(outputSchema);
 
     TupleSchema inputSchema = sets.schema();
 
-    std::vector<int> ans(outputSchema.fields().size(), -1);
+    std::vector<int> ans(std::max(outputSchema.fields().size(), selects.attr_num), -1);
 
-    for (int i = 0; i < inputSchema.fields().size(); i++) {
-      for (int j = 0; j < outputSchema.fields().size(); j++) {
-        if (inputSchema.field(i).to_string() == outputSchema.field(j).to_string()) {
-          ans[j] = i;
+    if (selects.agg_num != 0) {
+      for (int i = 0; i < inputSchema.fields().size(); i++) {
+        ans[i + selects.groupby_num] = i;
+      }
+    }else {
+      for (int i = 0; i < inputSchema.fields().size(); i++) {
+        for (int j = 0; j < outputSchema.fields().size(); j++) {
+          if (inputSchema.field(i).to_string() == outputSchema.field(j).to_string()) {
+            ans[j] = i;
+          }
         }
       }
     }
@@ -658,22 +675,14 @@ RC ExecuteStage::do_join(const char *db, Query *sql, SessionEvent *session_event
 
       outputs.add(std::move(outputTuple));
     }
-    std::string os;
-    if (getAttrRelationName(selects, os)) {
-      ss << os;
-      outputs.printWithoutSchema(ss);
-    }else {
-      outputs.print(ss);
-    }
-  }else {
-    sets.print(ss);
+    ss << getOutputHead(selects);
+    outputs.printWithoutSchema(ss);
   }
 
   session_event->set_response(ss.str());
   end_trx_if_need(session, trx, true);
   return rc;
 }
-
 
 
 

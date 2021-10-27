@@ -38,6 +38,7 @@ protected:
                      common::CallbackContext *context) override;
 
   void handle_request(common::StageEvent *event);
+  RC select(const char *db, Query *sql, SessionEvent *session_event);
   RC do_select(const char *db, Query *sql, SessionEvent *session_event);
   RC do_agg(const char *db, Query *sql, SessionEvent *session_event);
   RC do_join(const char *db, Query *sql, SessionEvent *session_event);

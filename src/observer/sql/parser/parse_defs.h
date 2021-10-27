@@ -83,6 +83,10 @@ typedef struct {
   char *    relations[MAX_NUM];     // relations in From clause
   size_t    condition_num;          // Length of conditions in Where clause
   Condition conditions[MAX_NUM];    // conditions in Where clause
+  size_t    groupby_num;          // Length of attrs in Group clause
+  RelAttr   groupbys[MAX_NUM];    // attrs in Group clause
+  size_t    orderby_num;          // Length of attrs in Group clause
+  RelAttr   orderbys[MAX_NUM];    // attrs in Group clause
 } Selects;
 
 // struct of insert
@@ -184,8 +188,6 @@ enum SqlCommandFlag {
   SCF_LOAD_DATA,
   SCF_HELP,
   SCF_EXIT,
-  SCF_AGG,
-  SCF_JOIN,
 };
 // struct of flag and sql_struct
 typedef struct Query {
@@ -220,6 +222,7 @@ void attr_info_destroy(AttrInfo *attr_info);
 
 void selects_init(Selects *selects, ...);
 void selects_append_attribute(Selects *selects, RelAttr *rel_attr);
+void selects_append_groupbys(Selects *selects, RelAttr *rel_attr);
 void selects_append_aggregation(Selects *selects, AggAttr *agg_attr);
 void selects_append_relation(Selects *selects, const char *relation_name);
 void selects_append_conditions(Selects *selects, Condition conditions[], size_t condition_num);
