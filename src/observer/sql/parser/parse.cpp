@@ -23,13 +23,14 @@ RC parse(char *st, Query *sqln);
 extern "C" {
 #endif // __cplusplus
 
-void relation_attr_init(RelAttr *relation_attr, const char *relation_name, const char *attribute_name) {
+void relation_attr_init(RelAttr *relation_attr, const char *relation_name, const char *attribute_name, AggType type){
   if (relation_name != nullptr) {
     relation_attr->relation_name = strdup(relation_name);
   } else {
     relation_attr->relation_name = nullptr;
   }
   relation_attr->attribute_name = strdup(attribute_name);
+  relation_attr->aggType = type;
 }
 
 void relation_attr_destroy(RelAttr *relation_attr) {
@@ -37,24 +38,7 @@ void relation_attr_destroy(RelAttr *relation_attr) {
   free(relation_attr->attribute_name);
   relation_attr->relation_name = nullptr;
   relation_attr->attribute_name = nullptr;
-}
-
-void relation_agg_init(AggAttr *agg_attr, const char *relation_name, const char *attribute_name, AggType type) {
-  if (relation_name != nullptr) {
-    agg_attr->relation_name = strdup(relation_name);
-  } else {
-    agg_attr->relation_name = nullptr;
-  }
-  agg_attr->attribute_name = strdup(attribute_name);
-  agg_attr->aggType = type;
-}
-
-void relation_agg_destroy(AggAttr *agg_attr) {
-  free(agg_attr->relation_name);
-  free(agg_attr->attribute_name);
-  agg_attr->relation_name = nullptr;
-  agg_attr->attribute_name = nullptr;
-  agg_attr->aggType = AggType::NO_AGG;
+  relation_attr->aggType = NO_AGG;
 }
 
 void value_init_integer(Value *value, int v) {
@@ -160,9 +144,6 @@ void selects_append_groupbys(Selects *selects, RelAttr *rel_attr) {
   selects->groupbys[selects->groupby_num++] = *rel_attr;
 }
 
-void selects_append_aggregation(Selects *selects, AggAttr *agg_attr) {
-  selects->aggAttrs[selects->agg_num++] = *agg_attr;
-}
 void selects_append_relation(Selects *selects, const char *relation_name) {
   selects->relations[selects->relation_num++] = strdup(relation_name);
 }
@@ -192,10 +173,6 @@ void selects_destroy(Selects *selects) {
   }
   selects->condition_num = 0;
 
-  for (size_t i = 0; i < selects->agg_num; i++) {
-    relation_agg_destroy(&selects->aggAttrs[i]);
-  }
-  selects->agg_num = 0;
   for (size_t i = 0; i < selects->groupby_num; i++) {
     relation_attr_destroy(&selects->groupbys[i]);
   }
