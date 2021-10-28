@@ -141,6 +141,7 @@ ParserContext *get_context(yyscan_t scanner)
 %type <condition1> condition;
 %type <value1> value;
 %type <number> number;
+%type <number> unique;
 
 %%
 
@@ -223,12 +224,20 @@ desc_table:
     ;
 
 create_index:		/*create index 语句的语法解析树*/
-    CREATE INDEX ID ON ID LBRACE ID RBRACE SEMICOLON
+    CREATE unique INDEX ID ON ID LBRACE ID RBRACE SEMICOLON
 		{
 			CONTEXT->ssql->flag = SCF_CREATE_INDEX;//"create_index";
-			create_index_init(&CONTEXT->ssql->sstr.create_index, $3, $5, $7);
+			create_index_init(&CONTEXT->ssql->sstr.create_index, $4, $6, $8, $2);
 		}
     ;
+
+unique:
+{
+$$=0;
+}
+| UNIQUE {
+$$=1;
+}
 
 drop_index:			/*drop index 语句的语法解析树*/
     DROP INDEX ID  SEMICOLON 

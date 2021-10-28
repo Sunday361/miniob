@@ -77,6 +77,8 @@ public:
    */
   RC insert_entry(const char *pkey, const RID *rid);
 
+  RC insert_entry_unique(const char *pkey, const RID *rid);
+
   /**
    * 从IndexHandle句柄对应的索引中删除一个值为（*pData，rid）的索引项
    * @return RECORD_INVALID_KEY 指定值不存在
@@ -96,6 +98,7 @@ public:
 protected:
   RC find_leaf(const char *pkey, PageNum *leaf_page);
   RC insert_into_leaf(PageNum leaf_page, const char *pkey, const RID *rid);
+  RC insert_into_leaf_unique(PageNum leaf_page, const char *pkey, const RID *rid);
   RC insert_into_leaf_after_split(PageNum leaf_page, const char *pkey, const RID *rid);
   RC insert_into_parent(PageNum parent_page, PageNum leaf_page, const char *pkey, PageNum right_page);
   RC insert_into_new_root(PageNum leaf_page, const char *pkey, PageNum right_page);
