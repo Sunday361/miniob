@@ -59,7 +59,12 @@ struct Key {
   Key(std::vector<TupleValue*>& keys): keys_(keys) {}
   bool operator<(const Key& other) const {
     for (int i = 0; i < keys_.size(); i++) {
-      if (keys_[i]->compare(*other.keys_[i]) == -1) {
+      int cmp = keys_[i]->compare(*other.keys_[i]);
+      if (cmp == 0) {
+        continue;
+      }else if (cmp == 1) {
+        return false;
+      }else {
         return true;
       }
     }

@@ -223,7 +223,7 @@ desc_table:
     ;
 
 create_index:		/*create index 语句的语法解析树*/
-    CREATE INDEX ID ON ID LBRACE ID RBRACE SEMICOLON 
+    CREATE INDEX ID ON ID LBRACE ID RBRACE SEMICOLON
 		{
 			CONTEXT->ssql->flag = SCF_CREATE_INDEX;//"create_index";
 			create_index_init(&CONTEXT->ssql->sstr.create_index, $3, $5, $7);
@@ -398,17 +398,30 @@ select:				/*  select 语句的语法解析树*/
 group:
 {
 
-}| GROUP_BY ID {
+}| GROUP_BY ID group_list {
             			RelAttr attr;
             			relation_attr_init(&attr, NULL, $2, NO_AGG);
             			selects_append_groupbys(&CONTEXT->ssql->sstr.selection, &attr);
             		}
-              	| GROUP_BY ID DOT ID {
+              	| GROUP_BY ID DOT ID group_list {
             			RelAttr attr;
             			relation_attr_init(&attr, $2, $4, NO_AGG);
             			selects_append_groupbys(&CONTEXT->ssql->sstr.selection, &attr);
             		}
 ;
+
+group_list:
+| COMMA ID DOT ID group_list {
+RelAttr attr;
+            			relation_attr_init(&attr, $2, $4, NO_AGG);
+            			selects_append_groupbys(&CONTEXT->ssql->sstr.selection, &attr);
+}
+| COMMA ID group_list {
+RelAttr attr;
+            			relation_attr_init(&attr, NULL, $2, NO_AGG);
+            			selects_append_groupbys(&CONTEXT->ssql->sstr.selection, &attr);
+}
+
 
 order:
 {
