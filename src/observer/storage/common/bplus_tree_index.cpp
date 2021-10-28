@@ -61,6 +61,9 @@ RC BplusTreeIndex::close() {
 }
 
 RC BplusTreeIndex::insert_entry(const char *record, const RID *rid) {
+  if (index_meta_.isUnique()) {
+    return index_handler_.insert_entry_unique(record + field_meta_.offset(), rid);
+  }
   return index_handler_.insert_entry(record + field_meta_.offset(), rid);
 }
 
