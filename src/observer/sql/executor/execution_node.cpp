@@ -164,46 +164,47 @@ RC AggregateExeNode::execute(TupleSet &outputSet) {
   }
   MakeKey makeKey(groups);
   int first;
+  LOG_INFO("group is %d", groups.size());
   for (auto &tuple : tuple_set.tuples()) {
     first = 0;
-    std::vector<TupleValue *> &v = values_;
+    std::vector<TupleValue *>* v;
     auto key = makeKey(tuple);
     if (groups.empty()) {
       if (values_.empty()) {
         initHash(false, key);
         first = 1;
       }
-      v = values_;
+      v = &values_;
     } else {
       if (0 == gvalues_.count(key)) {
         initHash(true, key);
         first = 1;
       }
-      v = gvalues_[key];
+      v = &gvalues_[key];
     }
     for (int i = 0; i < aggTypes_.size(); i++) {
       switch (aggTypes_[i]) {
         case AVG_AGG:
-          v[i]->addValue(tuple.get(aggregations[i]));
+          v->operator[](i)->addValue(tuple.get(aggregations[i]));
           break;
         case MAX_AGG:
-          if (v[i]->compare(tuple.get(aggregations[i])) == -1) {
-            v[i]->setValue(tuple.get(aggregations[i]));
+          if (v->operator[](i)->compare(tuple.get(aggregations[i])) == -1) {
+            v->operator[](i)->setValue(tuple.get(aggregations[i]));
           }
           break;
         case MIN_AGG:
-          if (v[i]->compare(tuple.get(aggregations[i])) == 1) {
-            v[i]->setValue(tuple.get(aggregations[i]));
+          if (v->operator[](i)->compare(tuple.get(aggregations[i])) == 1) {
+            v->operator[](i)->setValue(tuple.get(aggregations[i]));
           }
           break;
         case COUNT_AGG:
-          v[i]->addValue(IntValue(1));
+          v->operator[](i)->addValue(IntValue(1));
           break;
         case NO_AGG:
           if (first == 1) {
-            v[i]->setValue(tuple.get(aggregations[i]));
+            v->operator[](i)->setValue(tuple.get(aggregations[i]));
           }else {
-            if (v[i]->compare(tuple.get(aggregations[i])) != 0) {
+            if (v->operator[](i)->compare(tuple.get(aggregations[i])) != 0) {
               return RC::SQL_SYNTAX;
             }
           }
