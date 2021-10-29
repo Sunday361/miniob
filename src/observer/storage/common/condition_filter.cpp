@@ -40,7 +40,7 @@ DefaultConditionFilter::~DefaultConditionFilter()
 
 RC DefaultConditionFilter::init(const ConDesc &left, const ConDesc &right, AttrType attr_type, CompOp comp_op)
 {
-  if (attr_type < CHARS || attr_type > DATES) {
+  if (attr_type < CHARS || attr_type > NULLTYPE) {
     LOG_ERROR("Invalid condition with unsupported attribute type: %d", attr_type);
     return RC::INVALID_ARGUMENT;
   }
@@ -77,13 +77,13 @@ RC DefaultConditionFilter::init(Table &table, const Condition &condition)
     left.attr_offset = field_left->offset();
 
     left.value = nullptr;
-
+    left.is_null = false;
     type_left = field_left->type();
   } else {
     left.is_attr = false;
     left.value = condition.left_value.data;  // 校验type 或者转换类型
     type_left = condition.left_value.type;
-
+    left.is_null = (type_left == NULLTYPE);
     left.attr_length = 0;
     left.attr_offset = 0;
   }
@@ -98,13 +98,13 @@ RC DefaultConditionFilter::init(Table &table, const Condition &condition)
     right.attr_length = field_right->len();
     right.attr_offset = field_right->offset();
     type_right = field_right->type();
-
+    right.is_null = false;
     right.value = nullptr;
   } else {
     right.is_attr = false;
     right.value = condition.right_value.data;
     type_right = condition.right_value.type;
-
+    right.is_null = (type_right == NULLTYPE);
     right.attr_length = 0;
     right.attr_offset = 0;
   }
@@ -116,7 +116,9 @@ RC DefaultConditionFilter::init(Table &table, const Condition &condition)
   //  }
   // NOTE：这里没有实现不同类型的数据比较，比如整数跟浮点数之间的对比
   // 但是选手们还是要实现。这个功能在预选赛中会出现
-  if (type_left != type_right) {
+
+  if (type_left != NULLTYPE && type_right != NULLTYPE && type_left != type_right) {
+    LOG_INFO("SCHEMA_FIELD_TYPE_MISMATCH");
     return RC::SCHEMA_FIELD_TYPE_MISMATCH;
   }
 
@@ -127,19 +129,42 @@ bool DefaultConditionFilter::filter(const Record &rec) const
 {
   char *left_value = nullptr;
   char *right_value = nullptr;
+  bool isLeftNull = false;
+  bool isRightNull = false;
 
   if (left_.is_attr) {  // value
+    Bitmap* bitmap = reinterpret_cast<Bitmap*>(rec.data);
+    LOG_INFO("left off %d", left_.attr_offset);
+    isLeftNull = bitmap->operator[]((left_.attr_offset -4)/ 4);
+    LOG_INFO("left is null %d", isLeftNull);
     left_value = (char *)(rec.data + left_.attr_offset);
   } else {
-    left_value = (char *)left_.value;
+    left_value = left_.value != nullptr ? (char *)left_.value : nullptr;
   }
 
   if (right_.is_attr) {
+    Bitmap* bitmap = reinterpret_cast<Bitmap*>(rec.data);
+    LOG_INFO("right off %d", right_.attr_offset);
+    isRightNull = bitmap->operator[]((right_.attr_offset-4) / 4);
     right_value = (char *)(rec.data + right_.attr_offset);
   } else {
-    right_value = (char *)right_.value;
+    right_value = right_.value != nullptr ? (char *)right_.value : nullptr;
+  }
+  // 判断 null 比较的情况 null == null / null ！= 非null
+  // 其他情况全部返回 false
+
+  if (comp_op_ == IS && isLeftNull && right_.is_null) {
+    return true;
   }
 
+  if (comp_op_ == IS_NOT && isLeftNull && !right_.is_null) {
+    return true;
+  }
+  LOG_INFO("%d %d %d %d", isRightNull , isLeftNull , left_.is_null ,right_.is_null);
+
+  if (isRightNull || isLeftNull || left_.is_null || right_.is_null) {
+    return false;
+  }
   int cmp_result = 0;
   switch (attr_type_) {
     case CHARS: {  // 字符串都是定长的，直接比较
