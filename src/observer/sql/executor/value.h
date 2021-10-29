@@ -30,6 +30,15 @@ public:
   virtual void addValue(const TupleValue &other) = 0;
   virtual void setValue(const TupleValue &other) = 0;
   virtual float getValue() const = 0;
+
+  bool isNull() const {
+    return isNull_;
+  }
+
+  void setNull() {
+    isNull_ = true;
+  }
+  bool isNull_ = false;
 private:
 };
 
@@ -39,10 +48,14 @@ public:
   }
 
   void to_string(std::ostream &os) const override {
-    os << value_;
+    if (isNull_)
+      os << "NULL";
+    else
+      os << value_;
   }
 
   int compare(const TupleValue &other) const override {
+    if (other.isNull()) return -1;
     const IntValue & int_other = (const IntValue &)other;
     if (value_ == int_other.value_) return 0;
     return value_ > int_other.value_ ? 1 : -1;
@@ -61,7 +74,6 @@ public:
   float getValue() const { // special for avg
     return value_ * 1.0;
   }
-
 private:
   int value_;
 };
@@ -72,6 +84,11 @@ public:
   }
 
   void to_string(std::ostream &os) const override {
+    if (isNull_) {
+      os << "NULL";
+      return;
+    }
+
     auto s = std::to_string(value_);
     int idx = s.size() - 1;
     while(idx >= 0 && s[idx] != '.') {
@@ -122,6 +139,10 @@ public:
   }
 
   void to_string(std::ostream &os) const override {
+    if (isNull_) {
+      os << "NULL";
+      return;
+    }
     os << value_;
   }
 
@@ -144,6 +165,7 @@ public:
   float getValue() const { // special for avg, not used
     return 1.0;
   }
+
 private:
   std::string value_;
 };
@@ -154,6 +176,10 @@ class DateValue : public TupleValue {
   }
 
   void to_string(std::ostream &os) const override {
+    if (isNull_) {
+      os << "NULL";
+      return;
+    }
     std::string s = std::to_string(value_);
     os << s.substr(0, 4) << "-" << s.substr(4, 2) << "-" << s.substr(6, 2);
   }

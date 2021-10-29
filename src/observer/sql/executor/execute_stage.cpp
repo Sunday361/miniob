@@ -374,6 +374,7 @@ RC create_selection_executor(Trx *trx, const Selects &selects, const char *db, c
       DefaultConditionFilter *condition_filter = new DefaultConditionFilter();
       RC rc = condition_filter->init(*table, condition);
       if (rc != RC::SUCCESS) {
+        LOG_INFO("create condition failed");
         delete condition_filter;
         for (DefaultConditionFilter * &filter : condition_filters) {
           delete filter;

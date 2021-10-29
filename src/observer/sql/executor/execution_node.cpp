@@ -146,7 +146,7 @@ RC AggregateExeNode::execute(TupleSet &outputSet) {
   for (int i = 0; i < tupleSchema_.fields().size(); i++) {
     if (0 == strcmp(tupleSchema_.field(i).field_name(), "*") ||
         0 == strcmp(tupleSchema_.field(i).field_name(), "1")) {
-      aggregations.push_back(0);
+      aggregations.push_back(-1);
       continue;
     }
     for (int j = 0; j < tuple_set.schema().fields().size(); j++) {
@@ -160,11 +160,13 @@ RC AggregateExeNode::execute(TupleSet &outputSet) {
     if (aggTypes_[i] == AVG_AGG) {
       aggTypes_.emplace_back(COUNT_AGG);
       tupleSchema_.add(INTS, tupleSchema_.field(i).table_name(), tupleSchema_.field(i).field_name());
+      aggregations.push_back(aggregations[i]);
     }
   }
   MakeKey makeKey(groups);
   int first;
   LOG_INFO("group is %d", groups.size());
+  LOG_INFO("child size is %d", tuple_set.size());
   for (auto &tuple : tuple_set.tuples()) {
     first = 0;
     std::vector<TupleValue *>* v;
@@ -185,27 +187,42 @@ RC AggregateExeNode::execute(TupleSet &outputSet) {
     for (int i = 0; i < aggTypes_.size(); i++) {
       switch (aggTypes_[i]) {
         case AVG_AGG:
-          v->operator[](i)->addValue(tuple.get(aggregations[i]));
+          if (!tuple.get(aggregations[i]).isNull())
+            v->operator[](i)->addValue(tuple.get(aggregations[i]));
           break;
         case MAX_AGG:
-          if (v->operator[](i)->compare(tuple.get(aggregations[i])) == -1) {
-            v->operator[](i)->setValue(tuple.get(aggregations[i]));
+          if (!tuple.get(aggregations[i]).isNull()) {
+            if (v->operator[](i)->compare(tuple.get(aggregations[i])) == -1) {
+              v->operator[](i)->setValue(tuple.get(aggregations[i]));
+            }
           }
           break;
         case MIN_AGG:
-          if (v->operator[](i)->compare(tuple.get(aggregations[i])) == 1) {
-            v->operator[](i)->setValue(tuple.get(aggregations[i]));
+          if (!tuple.get(aggregations[i]).isNull()) {
+            if (v->operator[](i)->compare(tuple.get(aggregations[i])) == 1) {
+              v->operator[](i)->setValue(tuple.get(aggregations[i]));
+            }
           }
           break;
         case COUNT_AGG:
-          v->operator[](i)->addValue(IntValue(1));
+          if (aggregations[i] == -1 || !tuple.get(aggregations[i]).isNull()) {
+            v->operator[](i)->addValue(IntValue(1));
+          }
           break;
         case NO_AGG:
           if (first == 1) {
-            v->operator[](i)->setValue(tuple.get(aggregations[i]));
+            if (!tuple.get(aggregations[i]).isNull())
+              v->operator[](i)->setValue(tuple.get(aggregations[i]));
+            else
+              v->operator[](i)->isNull_ = true;
           }else {
-            if (v->operator[](i)->compare(tuple.get(aggregations[i])) != 0) {
-              return RC::SQL_SYNTAX;
+            if (!tuple.get(aggregations[i]).isNull()) {
+              if (v->operator[](i)->compare(tuple.get(aggregations[i])) != 0) {
+                return RC::SQL_SYNTAX;
+              }
+            }else {
+              if (!v->operator[](i)->isNull())
+                return RC::SQL_SYNTAX;
             }
           }
           break;
@@ -335,6 +352,9 @@ bool JoinExeNode::cmp(std::vector<int>& idx_left, std::vector<int>& idx_right,
                       const Tuple& leftTuple, const Tuple& rightTuple) const {
   bool ans = true;
   for (int k = 0; k < conditions_.size(); k++) {
+    if (leftTuple.get(idx_left[k]).isNull() || rightTuple.get(idx_right[k]).isNull()) {
+      return false;
+    }
     switch (conditions_[k].comp) {
       case EQUAL_TO:
         ans &= (leftTuple.get(idx_left[k]).compare(rightTuple.get(idx_right[k])) == 0);

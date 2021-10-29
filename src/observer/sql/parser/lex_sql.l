@@ -86,9 +86,12 @@ DAY              [0]{0,1}[1-9]|[1-2][0-9]|[3][0-1]
 [Gg][Rr][Oo][Uu][Pp]" "[Bb][Yy]          RETURN_TOKEN(GROUP_BY);
 [Oo][Rr][Dd][Ee][Rr]" "[Bb][Yy]          RETURN_TOKEN(ORDER_BY);
 [Uu][Nn][Ii][Qq][Uu][Ee]                 RETURN_TOKEN(UNIQUE);
+[Ii][Ss]                                 RETURN_TOKEN(OP_IS);
+[Ii][Ss]" "[Nn][Oo][Tt]                  RETURN_TOKEN(OP_NOT);
 {ID}							                       yylval->string=strdup(yytext); RETURN_TOKEN(ID);
 "("								                       RETURN_TOKEN(LBRACE);
 ")"								                       RETURN_TOKEN(RBRACE);
+
 
 ","                                      RETURN_TOKEN(COMMA);
 "="                                      RETURN_TOKEN(EQ);

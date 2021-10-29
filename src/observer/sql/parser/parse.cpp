@@ -86,6 +86,7 @@ void date_init_string(Value *value, const char *v) {
 
 void value_init_null(Value *value) {
   value->data = nullptr;
+  value->type = NULLTYPE;
 }
 
 void value_destroy(Value *value) {

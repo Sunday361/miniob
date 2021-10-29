@@ -44,11 +44,13 @@ typedef enum {
   LESS_THAN,    //"<"     3
   GREAT_EQUAL,  //">="    4
   GREAT_THAN,   //">"     5
+  IS,           // 仅用于 null
+  IS_NOT,       // 仅用于 null
   NO_OP
 } CompOp;
 
 //属性值类型
-typedef enum { UNDEFINED, CHARS, INTS, FLOATS, DATES } AttrType;
+typedef enum { UNDEFINED, CHARS, INTS, FLOATS, DATES, NULLTYPE } AttrType;
 
 //属性值
 typedef struct _Value {
