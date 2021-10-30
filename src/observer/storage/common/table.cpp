@@ -321,17 +321,14 @@ RC Table::make_record(int value_num, const Value *values, char * &record_out) {
   // 复制所有字段的值
   int record_size = table_meta_.record_size();
   char *record = new char [record_size];
-  Bitmap *bitmap = reinterpret_cast<Bitmap*>(record);
-  bitmap->set_bit(0, false);
+
   for (int i = 0; i < value_num; i++) {
     const FieldMeta *field = table_meta_.field(i + normal_field_start_index);
     const Value &value = values[i];
-    if (value.data) {
-      bitmap->set_bit(i + 1, false);
-      memcpy(record + field->offset(), value.data, field->len());
-    }else {
-      bitmap->set_bit(i + 1, true);
-    }
+
+    memcpy(record + field->offset(), value.data, field->len());
+    char* isNull = record + field->offset() + 4;
+    *isNull = value.type == NULLTYPE;
   }
 
   record_out = record;
@@ -403,11 +400,12 @@ RC Table::scan_record(Trx *trx, ConditionFilter *filter, int limit, void *contex
     limit = INT_MAX;
   }
 
-  IndexScanner *index_scanner = find_index_for_scan(filter);
-  if (index_scanner != nullptr) {
-    return scan_record_by_index(trx, index_scanner, filter, limit, context, record_reader);
+  if (filter && !filter->notUseIndex()) {
+    IndexScanner *index_scanner = find_index_for_scan(filter);
+    if (index_scanner != nullptr) {
+      return scan_record_by_index(trx, index_scanner, filter, limit, context, record_reader);
+    }
   }
-
   RC rc = RC::SUCCESS;
   RecordFileScanner scanner;
   rc = scanner.open_scan(*data_buffer_pool_, file_id_, filter);
@@ -751,7 +749,12 @@ RC Table::update_record(Trx *trx, Record *record, const char *attribute_name, co
   if (meta == nullptr) {
     return RC::SCHEMA_FIELD_NOT_EXIST;
   }
-  if (meta->type() != value->type) {
+
+  if (meta->type() != value->type && value->type != NULLTYPE) {
+    return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+  }
+
+  if (!meta->nullable() && value->type == NULLTYPE) {
     return RC::SCHEMA_FIELD_TYPE_MISMATCH;
   }
 
@@ -781,6 +784,8 @@ RC Table::update_record(Trx *trx, Record *record, const char *attribute_name, co
   }else {
     memmove(record->data + meta->offset(), value->data, meta->len());
   }
+  char isNull = value->type == NULLTYPE;
+  memmove(record->data + meta->offset() + 4, &isNull, 1);
   if (trx != nullptr) {
     rc = trx->update_record(this, record);
   } else {

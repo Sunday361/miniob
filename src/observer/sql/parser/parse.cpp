@@ -85,7 +85,9 @@ void date_init_string(Value *value, const char *v) {
 }
 
 void value_init_null(Value *value) {
-  value->data = nullptr;
+  value->data = malloc(4);
+  int v = 0;
+  memcpy(value->data, &v, 4);
   value->type = NULLTYPE;
 }
 
@@ -129,7 +131,7 @@ void condition_destroy(Condition *condition) {
 void attr_info_init(AttrInfo *attr_info, const char *name, AttrType type, size_t length, unsigned char isNullable) {
   attr_info->name = strdup(name);
   attr_info->type = type;
-  attr_info->length = 5;
+  attr_info->length = 5; // one byte for null
   attr_info->isNullable = isNullable;
 }
 void attr_info_destroy(AttrInfo *attr_info) {

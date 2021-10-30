@@ -29,27 +29,27 @@ class RecordDeleter;
 class RecordUpdater;
 class Trx;
 
-#define LSB_ONE_HOT_MASK(n) (1U << n)
-
-#define LSB_ONE_COLD_MASK(n) (0xFF - LSB_ONE_HOT_MASK(n))
-
-#define BYTE_SIZE 8U
-
-struct Bitmap{
-  uint8_t bits_[0];
-
-  Bitmap& set_bit(int pos, bool value) {
-    if (value)
-      bits_[pos / BYTE_SIZE] |= static_cast<uint8_t>(LSB_ONE_HOT_MASK(pos % BYTE_SIZE));
-    else
-      bits_[pos / BYTE_SIZE] &= static_cast<uint8_t>(LSB_ONE_COLD_MASK(pos % BYTE_SIZE));
-    return *this;
-  }
-
-  bool operator[](int pos) const {
-    return static_cast<bool>(bits_[pos / BYTE_SIZE] & LSB_ONE_HOT_MASK(pos % BYTE_SIZE));
-  }
-};
+//#define LSB_ONE_HOT_MASK(n) (1U << n)
+//
+//#define LSB_ONE_COLD_MASK(n) (0xFF - LSB_ONE_HOT_MASK(n))
+//
+//#define BYTE_SIZE 8U
+//
+//struct Bitmap{
+//  uint8_t bits_[0];
+//
+//  Bitmap& set(int pos, bool value) {
+//    if (value)
+//      bits_[pos / BYTE_SIZE] |= static_cast<uint8_t>(LSB_ONE_HOT_MASK(pos % BYTE_SIZE));
+//    else
+//      bits_[pos / BYTE_SIZE] &= static_cast<uint8_t>(LSB_ONE_COLD_MASK(pos % BYTE_SIZE));
+//    return *this;
+//  }
+//
+//  bool get(int pos) const {
+//    return static_cast<bool>(bits_[pos / BYTE_SIZE] & LSB_ONE_HOT_MASK(pos % BYTE_SIZE));
+//  }
+//};
 
 
 class Table {

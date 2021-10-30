@@ -232,11 +232,8 @@ void TupleRecordConverter::add_record(const char *record) {
   const TupleSchema &schema = tuple_set_.schema();
   Tuple tuple;
   const TableMeta &table_meta = table_->table_meta();
-  auto* bitmap = reinterpret_cast<Bitmap*>(const_cast<char*>(record));
   for (const TupleField &field : schema.fields()) {
     const FieldMeta *field_meta = table_meta.field(field.field_name());
-    int idx = (field_meta->offset() - 4) / 4;
-    assert(idx >= 0);
     assert(field_meta != nullptr);
     switch (field_meta->type()) {
       case INTS: {
@@ -263,8 +260,8 @@ void TupleRecordConverter::add_record(const char *record) {
         LOG_PANIC("Unsupported field type. type=%d", field_meta->type());
       }
     }
-    if (bitmap->operator[](idx)) {
-      LOG_INFO("idx %d", idx);
+    uint8_t isNull = *(uint8_t*)(record + field_meta->offset() + 4);
+    if (isNull) {
       tuple.values().back()->setNull();
     }
   }
