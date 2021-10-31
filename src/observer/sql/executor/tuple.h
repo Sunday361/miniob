@@ -21,6 +21,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/executor/value.h"
 #include "sql/parser/parse.h"
 
+class TextManager;
 class Table;
 
 

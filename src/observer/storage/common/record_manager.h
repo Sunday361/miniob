@@ -187,6 +187,25 @@ private:
   RecordPageHandler   record_page_handler_;
 };
 
+class TextManager {
+ public:
+  TextManager(DiskBufferPool &buffer_pool, int file_id) {
+    disk_buffer_pool_ = &buffer_pool;
+    fileId_ = file_id;
+  }
 
+  RC getText(char* &data, uint64_t textId);
+
+  RC setText(char *data, uint64_t *TextId, int length);
+
+  int get_page_id() const;
+ private:
+  DiskBufferPool  *disk_buffer_pool_;
+  int fileId_;                    // 参考DiskBufferPool中的fileId
+  // 这个file就是用来存储所有的超长字段的表
+
+  int pageId_ = -1;
+  int nextOffset_ = 0;
+};
 
 #endif //__OBSERVER_STORAGE_COMMON_RECORD_MANAGER_H_

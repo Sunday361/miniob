@@ -19,6 +19,7 @@ See the Mulan PSL v2 for more details. */
 
 class DiskBufferPool;
 class RecordFileHandler;
+class TextManager;
 class ConditionFilter;
 class DefaultConditionFilter;
 struct Record;
@@ -50,6 +51,8 @@ class Trx;
 //    return static_cast<bool>(bits_[pos / BYTE_SIZE] & LSB_ONE_HOT_MASK(pos % BYTE_SIZE));
 //  }
 //};
+
+
 
 
 class Table {
@@ -91,6 +94,7 @@ public:
 
   RC sync();
 
+  TextManager& getTextManager() { return *textManger_; }
 public:
   RC commit_insert(Trx *trx, const RID &rid);
   RC commit_delete(Trx *trx, const RID &rid);
@@ -120,7 +124,7 @@ private:
 private:
   RC init_record_handler(const char *base_dir);
   RC make_record(int value_num, const Value *values, char * &record_out);
-
+  RC init_textManager(const char *base_dir);
 private:
   Index *find_index(const char *index_name) const;
 
@@ -131,6 +135,9 @@ private:
   int                     file_id_;
   RecordFileHandler *     record_handler_;   /// 记录操作
   std::vector<Index *>    indexes_;
+
+  // 全局的 text 管理 当 table 里面有 text字段才有值
+  TextManager* textManger_;
 };
 
 #endif // __OBSERVER_STORAGE_COMMON_TABLE_H__

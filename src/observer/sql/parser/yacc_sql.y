@@ -117,6 +117,7 @@ ParserContext *get_context(yyscan_t scanner)
         UNIQUE
         OP_IS
         OP_NOT
+        TEXT_T
 
 %union {
   struct _Attr *attr;
@@ -277,7 +278,7 @@ attr_def:
     |ID_get type nullable
 		{
 			AttrInfo attribute;
-			attr_info_init(&attribute, CONTEXT->id, $2, 4, $3);
+			attr_info_init(&attribute, CONTEXT->id, $2, 5, $3);
 			create_table_append_attribute(&CONTEXT->ssql->sstr.create_table, &attribute);
 			// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name=(char*)malloc(sizeof(char));
 			// strcpy(CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name, CONTEXT->id); 
@@ -306,6 +307,7 @@ type:
        | STRING_T { $$=CHARS; }
        | FLOAT_T { $$=FLOATS; }
        | DATE_T { $$=DATES; }
+       | TEXT_T {$$=TEXTS; }
        ;
 ID_get:
 	ID 

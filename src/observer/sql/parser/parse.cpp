@@ -131,7 +131,7 @@ void condition_destroy(Condition *condition) {
 void attr_info_init(AttrInfo *attr_info, const char *name, AttrType type, size_t length, unsigned char isNullable) {
   attr_info->name = strdup(name);
   attr_info->type = type;
-  attr_info->length = 5; // one byte for null
+  attr_info->length = type == TEXTS ? 9 : 5; // one byte for null
   attr_info->isNullable = isNullable;
 }
 void attr_info_destroy(AttrInfo *attr_info) {

@@ -15,7 +15,7 @@ See the Mulan PSL v2 for more details. */
 #include <limits.h>
 #include <string.h>
 #include <algorithm>
-
+#include "unistd.h"
 #include "storage/common/table.h"
 #include "storage/common/table_meta.h"
 #include "common/log/log.h"
@@ -44,6 +44,11 @@ Table::~Table() {
   }
   for (auto& index : indexes_) {
     delete index;
+  }
+  if (textManger_) {
+    std::string textManagerName = std::string(base_dir_) + "/" + table_meta_.name() + TABLE_TEXT_SUFFIX;
+    unlink(textManagerName.c_str());
+    textManger_ = nullptr;
   }
 
   LOG_INFO("Table has been closed: %s", name());
@@ -108,7 +113,7 @@ RC Table::create(const char *path, const char *name, const char *base_dir, int a
   }
 
   rc = init_record_handler(base_dir);
-
+  rc = init_textManager(base_dir);
   base_dir_ = base_dir;
   LOG_INFO("Successfully create table %s:%s", base_dir, name);
   return rc;
@@ -311,6 +316,9 @@ RC Table::make_record(int value_num, const Value *values, char * &record_out) {
     if (value.type == NULLTYPE && field->nullable()) {
       continue;
     }
+    if (value.type == CHARS && field->type() == TEXTS) {
+      continue;
+    }
     if (field->type() != value.type) {
       LOG_ERROR("Invalid value type. field name=%s, type=%d, but given=%d",
         field->name(), field->type(), value.type);
@@ -326,8 +334,21 @@ RC Table::make_record(int value_num, const Value *values, char * &record_out) {
     const FieldMeta *field = table_meta_.field(i + normal_field_start_index);
     const Value &value = values[i];
 
-    memcpy(record + field->offset(), value.data, field->len());
-    char* isNull = record + field->offset() + 4;
+    /**
+     *  处理 超过一页的字段， 此处仅记录
+     * */
+    char* isNull;
+    if (field->type() == TEXTS) {
+      uint64_t id;
+      if (textManger_) {
+        textManger_->setText((char*)(value.data), &id, strlen((char*)(value.data)));
+      }
+      memcpy(record + field->offset(), &id, field->len());
+      isNull = record + field->offset() + 8;
+    }else {
+      memcpy(record + field->offset(), value.data, field->len());
+      isNull = record + field->offset() + 4;
+    }
     *isNull = value.type == NULLTYPE;
   }
 
@@ -358,6 +379,22 @@ RC Table::init_record_handler(const char *base_dir) {
 
   file_id_ = data_buffer_pool_file_id;
   return rc;
+}
+
+RC Table::init_textManager(const char *base_dir) {
+  if (textManger_ != nullptr) return RC::SUCCESS;
+
+  std::string textManagerName = std::string(base_dir) + "/" + table_meta_.name() + TABLE_TEXT_SUFFIX;
+  for (int i = 0; i < table_meta_.field_num(); i++) {
+    if (table_meta_.field(i)->type() == TEXTS) {
+      int fileId;
+      data_buffer_pool_->create_file(textManagerName.c_str());
+      data_buffer_pool_->open_file(textManagerName.c_str(), &fileId);
+      textManger_ = new TextManager(*data_buffer_pool_, fileId);
+      break;
+    }
+  }
+  return RC::SUCCESS;
 }
 
 /**
@@ -743,6 +780,33 @@ RC Table::update_record(Trx *trx, const char *attribute_name, const Value *value
   return rc;
 }
 
+bool cmpTypesAndConvert(const FieldMeta *meta, const Value *value) {
+  if (meta->nullable() && value->type == NULLTYPE) {
+    return true;
+  }
+  if (meta->type() == value->type) return true;
+
+  switch (meta->type()) {
+    case INTS:
+      return false; break;
+    case CHARS:
+      return false; break;
+    case DATES:
+      return false; break;
+    case FLOATS:
+      if (value->type == INTS) {
+        int v = *(int*)value->data;
+        float fv =  v * 1.0;
+        memmove(value->data, &fv, sizeof(float));
+      }
+      return true;
+      break;
+    case TEXTS:
+      return value->type == CHARS; break;
+  }
+  return false;
+}
+
 RC Table::update_record(Trx *trx, Record *record, const char *attribute_name, const Value *value) {
   RC rc = RC::SUCCESS;
   auto meta = table_meta_.field(attribute_name);
@@ -750,12 +814,8 @@ RC Table::update_record(Trx *trx, Record *record, const char *attribute_name, co
     return RC::SCHEMA_FIELD_NOT_EXIST;
   }
 
-  if (meta->type() != value->type && value->type != NULLTYPE) {
-    return RC::SCHEMA_FIELD_TYPE_MISMATCH;
-  }
-
-  if (!meta->nullable() && value->type == NULLTYPE) {
-    return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+  if (!cmpTypesAndConvert(meta, value)) {
+    return RC::MISMATCH;
   }
 
   auto indexMeta = table_meta_.find_index_by_field(attribute_name);
@@ -782,10 +842,17 @@ RC Table::update_record(Trx *trx, Record *record, const char *attribute_name, co
     }
     free(p);
   }else {
-    memmove(record->data + meta->offset(), value->data, meta->len());
+    if (meta->type() == TEXTS) {
+      auto textManager = textManger_;
+      uint64_t id;
+      textManager->setText((char*)(value->data), &id, strlen((char*)(value->data)));
+      memmove(record->data + meta->offset(), &id, meta->len() - 1);
+    } else {
+      memmove(record->data + meta->offset(), value->data, meta->len());
+    }
   }
   char isNull = value->type == NULLTYPE;
-  memmove(record->data + meta->offset() + 4, &isNull, 1);
+  memmove(record->data + meta->offset() + meta->len() - 1, &isNull, 1);
   if (trx != nullptr) {
     rc = trx->update_record(this, record);
   } else {
