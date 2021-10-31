@@ -19,6 +19,7 @@ See the Mulan PSL v2 for more details. */
 
 class DiskBufferPool;
 class RecordFileHandler;
+class TextManager;
 class ConditionFilter;
 class DefaultConditionFilter;
 struct Record;
@@ -29,27 +30,29 @@ class RecordDeleter;
 class RecordUpdater;
 class Trx;
 
-#define LSB_ONE_HOT_MASK(n) (1U << n)
+//#define LSB_ONE_HOT_MASK(n) (1U << n)
+//
+//#define LSB_ONE_COLD_MASK(n) (0xFF - LSB_ONE_HOT_MASK(n))
+//
+//#define BYTE_SIZE 8U
+//
+//struct Bitmap{
+//  uint8_t bits_[0];
+//
+//  Bitmap& set(int pos, bool value) {
+//    if (value)
+//      bits_[pos / BYTE_SIZE] |= static_cast<uint8_t>(LSB_ONE_HOT_MASK(pos % BYTE_SIZE));
+//    else
+//      bits_[pos / BYTE_SIZE] &= static_cast<uint8_t>(LSB_ONE_COLD_MASK(pos % BYTE_SIZE));
+//    return *this;
+//  }
+//
+//  bool get(int pos) const {
+//    return static_cast<bool>(bits_[pos / BYTE_SIZE] & LSB_ONE_HOT_MASK(pos % BYTE_SIZE));
+//  }
+//};
 
-#define LSB_ONE_COLD_MASK(n) (0xFF - LSB_ONE_HOT_MASK(n))
 
-#define BYTE_SIZE 8U
-
-struct Bitmap{
-  uint8_t bits_[0];
-
-  Bitmap& set_bit(int pos, bool value) {
-    if (value)
-      bits_[pos / BYTE_SIZE] |= static_cast<uint8_t>(LSB_ONE_HOT_MASK(pos % BYTE_SIZE));
-    else
-      bits_[pos / BYTE_SIZE] &= static_cast<uint8_t>(LSB_ONE_COLD_MASK(pos % BYTE_SIZE));
-    return *this;
-  }
-
-  bool operator[](int pos) const {
-    return static_cast<bool>(bits_[pos / BYTE_SIZE] & LSB_ONE_HOT_MASK(pos % BYTE_SIZE));
-  }
-};
 
 
 class Table {
@@ -91,6 +94,7 @@ public:
 
   RC sync();
 
+  TextManager& getTextManager() { return *textManger_; }
 public:
   RC commit_insert(Trx *trx, const RID &rid);
   RC commit_delete(Trx *trx, const RID &rid);
@@ -120,7 +124,7 @@ private:
 private:
   RC init_record_handler(const char *base_dir);
   RC make_record(int value_num, const Value *values, char * &record_out);
-
+  RC init_textManager(const char *base_dir);
 private:
   Index *find_index(const char *index_name) const;
 
@@ -131,6 +135,9 @@ private:
   int                     file_id_;
   RecordFileHandler *     record_handler_;   /// 记录操作
   std::vector<Index *>    indexes_;
+
+  // 全局的 text 管理 当 table 里面有 text字段才有值
+  TextManager* textManger_;
 };
 
 #endif // __OBSERVER_STORAGE_COMMON_TABLE_H__

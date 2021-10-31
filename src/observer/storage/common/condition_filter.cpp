@@ -108,7 +108,13 @@ RC DefaultConditionFilter::init(Table &table, const Condition &condition)
     right.attr_length = 0;
     right.attr_offset = 0;
   }
-
+  long long v = 0x0100000000;
+  if (left.is_null && !left.is_attr) {
+    memcpy(left.value, &v, 5);
+  }
+  if (right.is_null && !right.is_attr) {
+    memcpy(right.value, &v, 5);
+  }
   // 校验和转换
   //  if (!field_type_compare_compatible_table[type_left][type_right]) {
   //    // 不能比较的两个字段， 要把信息传给客户端
@@ -129,38 +135,33 @@ bool DefaultConditionFilter::filter(const Record &rec) const
 {
   char *left_value = nullptr;
   char *right_value = nullptr;
-  bool isLeftNull = false;
-  bool isRightNull = false;
+  char isLeftNull = 0;
+  char isRightNull = 0;
 
   if (left_.is_attr) {  // value
-    Bitmap* bitmap = reinterpret_cast<Bitmap*>(rec.data);
-    LOG_INFO("left off %d", left_.attr_offset);
-    isLeftNull = bitmap->operator[]((left_.attr_offset -4)/ 4);
-    LOG_INFO("left is null %d", isLeftNull);
     left_value = (char *)(rec.data + left_.attr_offset);
+    isLeftNull = *(char *)(rec.data + left_.attr_offset + 4);
   } else {
-    left_value = left_.value != nullptr ? (char *)left_.value : nullptr;
+    left_value = (char *)left_.value;
   }
 
   if (right_.is_attr) {
-    Bitmap* bitmap = reinterpret_cast<Bitmap*>(rec.data);
-    LOG_INFO("right off %d", right_.attr_offset);
-    isRightNull = bitmap->operator[]((right_.attr_offset-4) / 4);
     right_value = (char *)(rec.data + right_.attr_offset);
+    isRightNull = *(char *)(rec.data + right_.attr_offset + 4);
   } else {
-    right_value = right_.value != nullptr ? (char *)right_.value : nullptr;
+    right_value = (char *)right_.value;
   }
   // 判断 null 比较的情况 null == null / null ！= 非null
   // 其他情况全部返回 false
-
-  if (comp_op_ == IS && isLeftNull && right_.is_null) {
-    return true;
-  }
-
-  if (comp_op_ == IS_NOT && isLeftNull && !right_.is_null) {
-    return true;
-  }
   LOG_INFO("%d %d %d %d", isRightNull , isLeftNull , left_.is_null ,right_.is_null);
+  if (comp_op_ == IS) {
+    if ((isLeftNull && right_.is_null) || (left_.is_null && right_.is_null))
+      return true;
+  }
+
+  if (comp_op_ == IS_NOT && !isLeftNull && right_.is_null) {
+    return true;
+  }
 
   if (isRightNull || isLeftNull || left_.is_null || right_.is_null) {
     return false;

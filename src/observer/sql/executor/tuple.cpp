@@ -13,8 +13,11 @@ See the Mulan PSL v2 for more details. */
 //
 
 #include "sql/executor/tuple.h"
-#include "storage/common/table.h"
+
+#include <storage/common/record_manager.h>
+
 #include "common/log/log.h"
+#include "storage/common/table.h"
 
 Tuple::Tuple(const Tuple &other) {
   LOG_PANIC("Copy constructor of tuple is not supported");
@@ -232,11 +235,8 @@ void TupleRecordConverter::add_record(const char *record) {
   const TupleSchema &schema = tuple_set_.schema();
   Tuple tuple;
   const TableMeta &table_meta = table_->table_meta();
-  auto* bitmap = reinterpret_cast<Bitmap*>(const_cast<char*>(record));
   for (const TupleField &field : schema.fields()) {
     const FieldMeta *field_meta = table_meta.field(field.field_name());
-    int idx = (field_meta->offset() - 4) / 4;
-    assert(idx >= 0);
     assert(field_meta != nullptr);
     switch (field_meta->type()) {
       case INTS: {
@@ -259,12 +259,22 @@ void TupleRecordConverter::add_record(const char *record) {
         tuple.add_date(value);
       }
         break;
+      case TEXTS: {
+        uint64_t id = *(uint64_t *)(record + field_meta->offset());
+        auto m = table_->getTextManager();
+        char* text = (char*)malloc(4096);
+        m.getText(text, id);
+        const char *s = text;
+        tuple.add(s, strlen(text));
+        free(text);
+      }
+        break;
       default: {
         LOG_PANIC("Unsupported field type. type=%d", field_meta->type());
       }
     }
-    if (bitmap->operator[](idx)) {
-      LOG_INFO("idx %d", idx);
+    uint8_t isNull = *(uint8_t*)(record + field_meta->offset() + field_meta->len() - 1);
+    if (isNull) {
       tuple.values().back()->setNull();
     }
   }

@@ -551,3 +551,87 @@ RC RecordFileScanner::get_next_record(Record *rec) {
   }
   return ret;
 }
+
+RC TextManager::getText(char* &data, uint64_t textId) {
+  PageNum pageNum = (SlotNum)(textId >> 32);
+  SlotNum slotNum = (SlotNum)(textId & 0xffffffff);
+
+  BPPageHandle pageHandle;
+  disk_buffer_pool_->get_this_page(fileId_, pageNum, &pageHandle);
+
+  char* pos = pageHandle.frame->page.data + slotNum;
+  int len = *(int*)pos;
+  slotNum += 4;
+  LOG_INFO("get the text in %p page %d slot %d len %d", pos,pageNum,slotNum, len);
+  int len_in_page = len > BP_PAGE_DATA_SIZE - slotNum? BP_PAGE_DATA_SIZE - slotNum: len;
+  char* begin = pos + sizeof(int);
+  memcpy(data, begin, len_in_page);
+
+  if (len > BP_PAGE_DATA_SIZE - slotNum) {
+    auto nextPageNum = pageHandle.frame->page.nextPage_num;
+
+    disk_buffer_pool_->get_this_page(fileId_, nextPageNum, &pageHandle);
+    char* pos = pageHandle.frame->page.data;
+    memcpy(data + len_in_page, pos, len - BP_PAGE_DATA_SIZE + slotNum);
+  }
+
+  return RC::SUCCESS;
+}
+
+RC TextManager::setText(char *data, uint64_t *TextId, int length) {
+  PageNum pageNum;
+  SlotNum slotNum;
+  RC rc = RC::SUCCESS;
+  BPPageHandle pageHandle;
+  int current_page_id = get_page_id();
+
+  if (current_page_id == -1) {
+    rc = disk_buffer_pool_->allocate_page(fileId_, &pageHandle);
+    if (rc != RC::SUCCESS) return rc;
+
+    pageId_ = pageHandle.frame->page.page_num;
+  }
+
+  if (nextOffset_ > BP_PAGE_DATA_SIZE - 4) {
+    BPPageHandle nextPageHandle;
+    rc = disk_buffer_pool_->allocate_page(fileId_, &nextPageHandle);
+    if (rc != RC::SUCCESS) return rc;
+
+    pageHandle.frame->page.nextPage_num = nextPageHandle.frame->page.page_num;
+    nextOffset_ = 0;
+    pageId_ = nextPageHandle.frame->page.page_num;
+    pageHandle = nextPageHandle;
+  }
+
+  rc = disk_buffer_pool_->get_this_page(fileId_, get_page_id(), &pageHandle);
+  if (rc != RC::SUCCESS) return rc;
+
+  pageNum = pageHandle.frame->page.page_num;
+  slotNum = nextOffset_;
+  LOG_INFO("set the text in page %d slot %d len %d", pageNum, slotNum, length);
+  *TextId = ((uint64_t)pageNum << 32) | slotNum;
+  memcpy(pageHandle.frame->page.data + nextOffset_, &length, 4);
+  nextOffset_ += 4;
+  disk_buffer_pool_->mark_dirty(&pageHandle);
+  if (length > BP_PAGE_DATA_SIZE - nextOffset_) { // allocate new page
+    memcpy(pageHandle.frame->page.data + nextOffset_, data, BP_PAGE_DATA_SIZE - nextOffset_);
+    BPPageHandle nextPageHandle;
+    rc = disk_buffer_pool_->allocate_page(fileId_, &nextPageHandle);
+    if (rc != RC::SUCCESS) return rc;
+    int leftBytes = length - BP_PAGE_DATA_SIZE + nextOffset_;
+    pageHandle.frame->page.nextPage_num = nextPageHandle.frame->page.page_num;
+
+    nextOffset_ = 0;
+    memcpy(nextPageHandle.frame->page.data + nextOffset_, data + length - leftBytes, leftBytes);
+    nextOffset_ += leftBytes;
+    disk_buffer_pool_->mark_dirty(&nextPageHandle);
+    pageId_ = nextPageHandle.frame->page.page_num;
+  }else {
+    memcpy(pageHandle.frame->page.data + nextOffset_, data, length);
+    nextOffset_ += length;
+  }
+
+  return rc;
+}
+
+int TextManager::get_page_id() const { return pageId_; }

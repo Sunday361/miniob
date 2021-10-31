@@ -117,6 +117,7 @@ ParserContext *get_context(yyscan_t scanner)
         UNIQUE
         OP_IS
         OP_NOT
+        TEXT_T
 
 %union {
   struct _Attr *attr;
@@ -144,7 +145,6 @@ ParserContext *get_context(yyscan_t scanner)
 %type <value1> value;
 %type <number> number;
 %type <number> unique;
-%type <number> isOp;
 %%
 
 commands:		//commands or sqls. parser starts here.
@@ -278,7 +278,7 @@ attr_def:
     |ID_get type nullable
 		{
 			AttrInfo attribute;
-			attr_info_init(&attribute, CONTEXT->id, $2, 4, $3);
+			attr_info_init(&attribute, CONTEXT->id, $2, 5, $3);
 			create_table_append_attribute(&CONTEXT->ssql->sstr.create_table, &attribute);
 			// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name=(char*)malloc(sizeof(char));
 			// strcpy(CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name, CONTEXT->id); 
@@ -307,6 +307,7 @@ type:
        | STRING_T { $$=CHARS; }
        | FLOAT_T { $$=FLOATS; }
        | DATE_T { $$=DATES; }
+       | TEXT_T {$$=TEXTS; }
        ;
 ID_get:
 	ID 
@@ -773,33 +774,7 @@ condition:
 			// $$->right_attr.relation_name=$5;
 			// $$->right_attr.attribute_name=$7;
     }
-    | ID DOT ID isOp value {
-    RelAttr left_attr;
-    			relation_attr_init(&left_attr, $1, $3, NO_AGG);
-    			Value *right_value = &CONTEXT->values[CONTEXT->value_length - 1];
-
-    			Condition condition;
-    			condition_init(&condition, $4, 1, &left_attr, NULL, 0, NULL, right_value);
-    			CONTEXT->conditions[CONTEXT->condition_length++] = condition;
-    }
-    | ID isOp value {
-                RelAttr left_attr;
-                			relation_attr_init(&left_attr, NULL, $1, NO_AGG);
-                			Value *right_value = &CONTEXT->values[CONTEXT->value_length - 1];
-
-                			Condition condition;
-                			condition_init(&condition, $2, 1, &left_attr, NULL, 0, NULL, right_value);
-                			CONTEXT->conditions[CONTEXT->condition_length++] = condition;
-                }
     ;
-
-isOp:
-OP_IS {
-$$=IS;
-}| OP_NOT
-{
-$$=IS_NOT;
-}
 
 comOp:
   	  EQ { CONTEXT->comp = EQUAL_TO; }
@@ -808,6 +783,8 @@ comOp:
     | LE { CONTEXT->comp = LESS_EQUAL; }
     | GE { CONTEXT->comp = GREAT_EQUAL; }
     | NE { CONTEXT->comp = NOT_EQUAL; }
+    | OP_IS {CONTEXT->comp = IS;}
+    | OP_NOT {CONTEXT->comp = IS_NOT;}
     ;
 
 load_data:

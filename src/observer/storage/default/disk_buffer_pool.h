@@ -32,13 +32,15 @@ typedef int PageNum;
 //
 #define BP_INVALID_PAGE_NUM (-1)
 #define BP_PAGE_SIZE (1 << 12)
-#define BP_PAGE_DATA_SIZE (BP_PAGE_SIZE - sizeof(PageNum))
+#define BP_PAGE_DATA_SIZE (BP_PAGE_SIZE - sizeof(PageNum) - sizeof(PageNum) - sizeof(int))
 #define BP_FILE_SUB_HDR_SIZE (sizeof(BPFileSubHeader))
 #define BP_BUFFER_SIZE 50
 #define MAX_OPEN_FILE 1024
 
 typedef struct {
   PageNum page_num;
+  PageNum nextPage_num;
+  int  nextOffset;
   char data[BP_PAGE_DATA_SIZE];
 } Page;
 // sizeof(Page) should be equal to BP_PAGE_SIZE
@@ -53,6 +55,7 @@ typedef struct {
   unsigned int pin_count;
   unsigned long acc_time;
   int file_desc;
+
   Page page;
 } Frame;
 

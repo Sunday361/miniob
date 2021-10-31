@@ -39,6 +39,11 @@ public:
    * @return true means match condition, false means failed to match.
    */
   virtual bool filter(const Record &rec) const = 0;
+
+  /**
+   * 查询是否经过索引， 默认经过， 如果是 null 字段不经过
+   */
+   virtual bool notUseIndex() const = 0;
 };
 
 class DefaultConditionFilter : public ConditionFilter {
@@ -64,6 +69,10 @@ public:
     return comp_op_;
   }
 
+  bool notUseIndex() const {
+    return left_.is_null || right_.is_null || comp_op_ == IS || comp_op_ == IS_NOT;
+  }
+
 private:
   ConDesc  left_;
   ConDesc  right_;
@@ -86,6 +95,15 @@ public:
   }
   const ConditionFilter &filter(int index) const {
     return *filters_[index];
+  }
+
+  bool notUseIndex() const {
+    for (int i = 0; i < filter_num_; i++) {
+      if (filters_[i]->notUseIndex()) {
+        return true;
+      }
+    }
+    return false;
   }
 
 private:
