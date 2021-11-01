@@ -168,6 +168,12 @@ bool DefaultConditionFilter::filter(const Record &rec) const
     if (right_.is_attr && !isRightNull && left_.is_null) {
       return true;
     }
+    if (!left_.is_attr && !left_.is_null && right_.is_null) {
+      return true;
+    }
+    if (!right_.is_attr && !right_.is_null && left_.is_null) {
+      return true;
+    }
     if (left_.is_null && right_.is_null) {
       return false;
     }
