@@ -155,7 +155,9 @@ bool DefaultConditionFilter::filter(const Record &rec) const
   // 其他情况全部返回 false
   LOG_INFO("%d %d %d %d", isRightNull , isLeftNull , left_.is_null ,right_.is_null);
   if (comp_op_ == IS) {
-    if ((isLeftNull && right_.is_null) || (left_.is_null && right_.is_null))
+    if ((isLeftNull && right_.is_null) ||
+        (left_.is_null && right_.is_null) ||
+        (isRightNull && left_.is_null))
       return true;
   }
 
@@ -163,10 +165,10 @@ bool DefaultConditionFilter::filter(const Record &rec) const
     if (left_.is_null && right_.is_null) {
       return false;
     }
-    if (!left_.is_null && right_.is_null) {
+    if ((!left_.is_null && right_.is_null) || (!right_.is_null && left_.is_null)) {
       return true;
     }
-    if (!isLeftNull && right_.is_null)
+    if ((!isLeftNull && right_.is_null) || (!isRightNull && left_.is_null))
       return true;
   }
 
