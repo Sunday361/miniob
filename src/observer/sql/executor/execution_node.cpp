@@ -239,10 +239,14 @@ RC AggregateExeNode::execute(TupleSet &outputSet) {
       if (aggTypes_[i] == AVG_AGG) {
         auto ptr = values_[i];
         auto num = ptr->getValue();
-        if (values_[idx]->getValue())
-          values_[i] = new FloatValue(num / values_[idx++]->getValue());
-        else
+        if (values_[idx]->getValue()) {
+          values_[i] = new FloatValue(num / values_[idx]->getValue());
+          values_[i]->isNull_ = false;
+        }else {
           values_[i] = new FloatValue(0);
+          values_[i]->isNull_ = true;
+        }
+        idx++;
         delete ptr;
       }
     }
@@ -259,10 +263,13 @@ RC AggregateExeNode::execute(TupleSet &outputSet) {
         if (aggTypes_[i] == AVG_AGG) {
           auto ptr = v.second[i];
           auto num = ptr->getValue();
-          if (v.second[idx]->getValue())
+          if (v.second[idx]->getValue()) {
             v.second[i] = new FloatValue(num / v.second[idx]->getValue());
-          else
+            v.second[i]->isNull_ = false;
+          }else {
             v.second[i] = new FloatValue(0);
+            v.second[i]->isNull_ = true;
+          }
           delete ptr;
           idx++;
         }
