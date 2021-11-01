@@ -165,7 +165,7 @@ RC AggregateExeNode::execute(TupleSet &outputSet) {
   }
   MakeKey makeKey(groups);
   int first;
-  LOG_INFO("group is %d", groups.size());
+  //LOG_INFO("group is %d", groups.size());
   LOG_INFO("child size is %d", tuple_set.size());
   for (auto &tuple : tuple_set.tuples()) {
     first = 0;
