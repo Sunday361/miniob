@@ -160,6 +160,7 @@ RC AggregateExeNode::execute(TupleSet &outputSet) {
     if (aggTypes_[i] == AVG_AGG) {
       aggTypes_.emplace_back(COUNT_AGG);
       tupleSchema_.add(INTS, tupleSchema_.field(i).table_name(), tupleSchema_.field(i).field_name());
+      LOG_INFO("add table %s field %s", tupleSchema_.field(i).table_name(), tupleSchema_.field(i).field_name());
       aggregations.push_back(aggregations[i]);
     }
   }
@@ -236,7 +237,7 @@ RC AggregateExeNode::execute(TupleSet &outputSet) {
       if (aggTypes_[i] == AVG_AGG) {
         auto ptr = values_[i];
         auto num = ptr->getValue();
-        values_[i] = new FloatValue(num / values_[idx]->getValue());
+        values_[i] = new FloatValue(num / values_[idx++]->getValue());
         delete ptr;
       }
     }
