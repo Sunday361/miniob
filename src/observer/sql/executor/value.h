@@ -64,11 +64,13 @@ public:
   void addValue(const TupleValue &other) override {
     const IntValue & int_other = (const IntValue &)other;
     value_ += int_other.value_;
+    isNull_ = false;
   }
 
   void setValue(const TupleValue &other) {
     const IntValue & int_other = (const IntValue &)other;
     value_ = int_other.value_;
+    isNull_ = false;
   }
 
   float getValue() const { // special for avg
@@ -116,12 +118,14 @@ public:
 
   void addValue(const TupleValue &other) override {
     const FloatValue & float_other = (const FloatValue &)other;
+    isNull_ = false;
     value_ += float_other.value_;
   }
 
   void setValue(const TupleValue &other) override {
     const FloatValue & float_other = (const FloatValue &)other;
     value_ = float_other.value_;
+    isNull_ = false;
   }
 
   float getValue() const { // special for avg
@@ -154,12 +158,14 @@ public:
 
   void addValue(const TupleValue &other) override { // should not be used
     const StringValue & string_other = (const StringValue &)other;
+    isNull_ = false;
     value_ += string_other.value_;
   }
 
   void setValue(const TupleValue &other) override { // should not be used
     const StringValue & string_other = (const StringValue &)other;
     value_ = string_other.value_;
+    isNull_ = false;
   }
 
   float getValue() const { // special for avg, not used
@@ -195,6 +201,7 @@ class DateValue : public TupleValue {
   void setValue(const TupleValue &other) override {
     const DateValue &date_other = (const DateValue &)other;
     value_ = date_other.value_;
+    isNull_ = false;
   }
 
   float getValue() const { // special for avg, not used

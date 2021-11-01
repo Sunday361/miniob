@@ -118,6 +118,8 @@ RC AggregateExeNode::initHash(bool isGroup, const Key& key) {
           v->emplace_back(new DateValue(19700101));
         break;
     }
+    if (aggTypes_[i] != AVG_AGG && aggTypes_[i] != COUNT_AGG)
+      v->back()->isNull_ = true;
   }
   return RC::SUCCESS;
 }
@@ -237,7 +239,10 @@ RC AggregateExeNode::execute(TupleSet &outputSet) {
       if (aggTypes_[i] == AVG_AGG) {
         auto ptr = values_[i];
         auto num = ptr->getValue();
-        values_[i] = new FloatValue(num / values_[idx++]->getValue());
+        if (values_[idx]->getValue())
+          values_[i] = new FloatValue(num / values_[idx++]->getValue());
+        else
+          values_[i] = new FloatValue(0);
         delete ptr;
       }
     }
@@ -254,7 +259,10 @@ RC AggregateExeNode::execute(TupleSet &outputSet) {
         if (aggTypes_[i] == AVG_AGG) {
           auto ptr = v.second[i];
           auto num = ptr->getValue();
-          v.second[i] = new FloatValue(num / v.second[idx]->getValue());
+          if (v.second[idx]->getValue())
+            v.second[i] = new FloatValue(num / v.second[idx]->getValue());
+          else
+            v.second[i] = new FloatValue(0);
           delete ptr;
           idx++;
         }
