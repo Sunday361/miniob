@@ -162,14 +162,15 @@ bool DefaultConditionFilter::filter(const Record &rec) const
   }
 
   if (comp_op_ == IS_NOT) {
+    if (left_.is_attr && !isLeftNull && right_.is_null) {
+      return true;
+    }
+    if (right_.is_attr && !isRightNull && left_.is_null) {
+      return true;
+    }
     if (left_.is_null && right_.is_null) {
       return false;
     }
-    if ((!left_.is_null && right_.is_null) || (!right_.is_null && left_.is_null)) {
-      return true;
-    }
-    if ((!isLeftNull && right_.is_null) || (!isRightNull && left_.is_null))
-      return true;
   }
 
   if (isRightNull || isLeftNull || left_.is_null || right_.is_null) {
