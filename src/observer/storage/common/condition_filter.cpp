@@ -140,14 +140,14 @@ bool DefaultConditionFilter::filter(const Record &rec) const
 
   if (left_.is_attr) {  // value
     left_value = (char *)(rec.data + left_.attr_offset);
-    isLeftNull = *(char *)(rec.data + left_.attr_offset + 4);
+    isLeftNull = *(char *)(rec.data + left_.attr_offset + left_.attr_length - 1);
   } else {
     left_value = (char *)left_.value;
   }
 
   if (right_.is_attr) {
     right_value = (char *)(rec.data + right_.attr_offset);
-    isRightNull = *(char *)(rec.data + right_.attr_offset + 4);
+    isRightNull = *(char *)(rec.data + right_.attr_offset + right_.attr_length - 1);
   } else {
     right_value = (char *)right_.value;
   }
@@ -159,8 +159,15 @@ bool DefaultConditionFilter::filter(const Record &rec) const
       return true;
   }
 
-  if (comp_op_ == IS_NOT && !isLeftNull && right_.is_null) {
-    return true;
+  if (comp_op_ == IS_NOT) {
+    if (left_.is_null && right_.is_null) {
+      return false;
+    }
+    if (!left_.is_null && right_.is_null) {
+      return true;
+    }
+    if (!isLeftNull && right_.is_null)
+      return true;
   }
 
   if (isRightNull || isLeftNull || left_.is_null || right_.is_null) {

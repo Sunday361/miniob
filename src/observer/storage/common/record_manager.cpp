@@ -566,7 +566,7 @@ RC TextManager::getText(char* &data, uint64_t textId) {
   int len_in_page = len > BP_PAGE_DATA_SIZE - slotNum? BP_PAGE_DATA_SIZE - slotNum: len;
   char* begin = pos + sizeof(int);
   memcpy(data, begin, len_in_page);
-
+  LOG_INFO("get the text in %p page %d slot %d len %d", data,pageNum,slotNum, strlen(data));
   if (len > BP_PAGE_DATA_SIZE - slotNum) {
     auto nextPageNum = pageHandle.frame->page.nextPage_num;
 

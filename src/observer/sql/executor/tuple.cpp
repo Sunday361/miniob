@@ -262,10 +262,12 @@ void TupleRecordConverter::add_record(const char *record) {
       case TEXTS: {
         uint64_t id = *(uint64_t *)(record + field_meta->offset());
         auto m = table_->getTextManager();
-        char* text = (char*)malloc(4096);
+        char* text = (char*)malloc(4097);
+        memset(text, 0, 4097);
         m.getText(text, id);
         const char *s = text;
         tuple.add(s, strlen(text));
+        LOG_INFO("add text %s len %d", s, strlen(text));
         free(text);
       }
         break;
