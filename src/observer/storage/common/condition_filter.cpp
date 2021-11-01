@@ -176,6 +176,7 @@ bool DefaultConditionFilter::filter(const Record &rec) const
   if (isRightNull || isLeftNull || left_.is_null || right_.is_null) {
     return false;
   }
+
   int cmp_result = 0;
   switch (attr_type_) {
     case CHARS: {  // 字符串都是定长的，直接比较
