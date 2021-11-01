@@ -53,7 +53,12 @@ void value_init_float(Value *value, float v) {
 }
 void value_init_string(Value *value, const char *v) {
   value->type = CHARS;
-  value->data = strdup(v);
+  int len = strlen(v);
+  len = std::min(4097, len + 1);
+  value->data = malloc(len);
+  char end = 0;
+  memcpy((char *)(value->data), v, len - 1);
+  memcpy((char *)(value->data) + len - 1, &end, 1);
 }
 void date_init_string(Value *value, const char *v) {
   value->type = DATES;
