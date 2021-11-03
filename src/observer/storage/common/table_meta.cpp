@@ -97,7 +97,7 @@ RC TableMeta::init(const char *name, int field_num, const AttrInfo attributes[])
   return RC::SUCCESS;
 }
 
-RC TableMeta::add_index(const IndexMeta &index) {
+RC TableMeta::add_index(const MultiIndexMeta &index) {
   indexes_.push_back(index);
   return RC::SUCCESS;
 }
@@ -141,8 +141,8 @@ int TableMeta::sys_field_num() const {
   return sys_fields_.size();
 }
 
-const IndexMeta * TableMeta::index(const char *name) const {
-  for (const IndexMeta &index : indexes_) {
+const MultiIndexMeta * TableMeta::index(const char *name) const {
+  for (const MultiIndexMeta &index : indexes_) {
     if (0 == strcmp(index.name(), name)) {
       return &index;
     }
@@ -150,16 +150,28 @@ const IndexMeta * TableMeta::index(const char *name) const {
   return nullptr;
 }
 
-const IndexMeta * TableMeta::find_index_by_field(const char *field) const {
-  for (const IndexMeta &index : indexes_) {
-    if (0 == strcmp(index.field(), field)) {
+const MultiIndexMeta * TableMeta::find_index_by_field(const char *field) const {
+  for (const MultiIndexMeta &index : indexes_) {
+    if (0 == strcmp(index.field(0), field) && index.fields().size() == 1) {
       return &index;
     }
   }
   return nullptr;
 }
 
-const IndexMeta * TableMeta::index(int i ) const {
+std::vector<MultiIndexMeta> TableMeta::find_indexs_by_field(const char *field) const {
+  std::vector<MultiIndexMeta> metas;
+  for (const MultiIndexMeta &index : indexes_) {
+    for (int i = 0; i < index.fields().size(); i++) {
+      if (0 == strcmp(index.field(i), field)) {
+        metas.emplace_back(index);
+      }
+    }
+  }
+  return metas;
+}
+
+const MultiIndexMeta * TableMeta::index(int i ) const {
   return &indexes_[i];
 }
 
@@ -261,12 +273,12 @@ int TableMeta::deserialize(std::istream &is) {
       return -1;
     }
     const int index_num = indexes_value.size();
-    std::vector<IndexMeta> indexes(index_num);
+    std::vector<MultiIndexMeta> indexes(index_num);
     for (int i = 0; i < index_num; i++) {
-      IndexMeta &index = indexes[i];
+      MultiIndexMeta &index = indexes[i];
 
       const Json::Value &index_value = indexes_value[i];
-      rc = IndexMeta::from_json(*this, index_value, index);
+      rc = MultiIndexMeta::from_json(*this, index_value, index);
       if (rc != RC::SUCCESS) {
         LOG_ERROR("Failed to deserialize table meta. table name=%s", table_name.c_str());
         return -1;

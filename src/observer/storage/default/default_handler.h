@@ -102,8 +102,11 @@ public:
    * @param attrName
    * @return
    */
+  RC create_unique_index(Trx *trx, const char *dbname, const char *relation_name,
+                         const char *index_name, const int len, char * const attribute_name[]);
+
   RC create_index(Trx *trx, const char *dbname, const char *relation_name,
-                  const char *index_name, const char *attribute_name, int isUnique);
+                  const char *index_name, const int len, char * const attribute_name[]);
 
   /**
    * 该函数用来删除名为indexName的索引。

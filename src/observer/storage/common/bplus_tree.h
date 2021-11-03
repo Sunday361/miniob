@@ -19,9 +19,10 @@ See the Mulan PSL v2 for more details. */
 #include "sql/parser/parse_defs.h"
 
 struct IndexFileHeader {
-  int attr_length;
+  std::vector<int> attr_lengths;
   int key_length;
-  AttrType attr_type;
+  int attr_length;
+  std::vector<AttrType> attr_types;
   PageNum root_page; // 初始时，root_page一定是1
   int node_num;
   int order;
@@ -44,7 +45,8 @@ struct TreeNode {
 };
 
 struct Tree {
-  AttrType attr_type;
+  std::vector<AttrType> attr_types;
+  std::vector<int> attr_lengths;
   int attr_length;
   int order;
   TreeNode *root;
@@ -56,7 +58,7 @@ public:
    * 此函数创建一个名为fileName的索引。
    * attrType描述被索引属性的类型，attrLength描述被索引属性的长度
    */
-  RC create(const char *file_name, AttrType attr_type, int attr_length);
+  RC create(const char *file_name, std::vector<AttrType> &attr_type, std::vector<int> &attr_length);
 
   /**
    * 打开名为fileName的索引文件。

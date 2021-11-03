@@ -226,12 +226,23 @@ desc_table:
     ;
 
 create_index:		/*create index 语句的语法解析树*/
-    CREATE unique INDEX ID ON ID LBRACE ID RBRACE SEMICOLON
+    CREATE unique INDEX ID ON ID LBRACE index_attr RBRACE SEMICOLON
 		{
 			CONTEXT->ssql->flag = SCF_CREATE_INDEX;//"create_index";
-			create_index_init(&CONTEXT->ssql->sstr.create_index, $4, $6, $8, $2);
+			create_index_init(&CONTEXT->ssql->sstr.create_index, $4, $6, $2);
 		}
-    ;
+		;
+
+index_attr:
+ID index_attr_lists{
+create_index_append(&CONTEXT->ssql->sstr.create_index, $1);
+}
+
+
+index_attr_lists:
+| COMMA ID index_attr_lists{
+create_index_append(&CONTEXT->ssql->sstr.create_index, $2);
+}
 
 unique:
 {

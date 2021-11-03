@@ -34,7 +34,7 @@ public:
 
   RC init(const char *name, int field_num, const AttrInfo attributes[]);
 
-  RC add_index(const IndexMeta &index);
+  RC add_index(const MultiIndexMeta &index);
 
 public:
   const char * name() const;
@@ -45,9 +45,10 @@ public:
   int field_num() const;
   int sys_field_num() const;
 
-  const IndexMeta * index(const char *name) const;
-  const IndexMeta * find_index_by_field(const char *field) const;
-  const IndexMeta * index(int i) const;
+  const MultiIndexMeta * index(const char *name) const;
+  const MultiIndexMeta * find_index_by_field(const char *field) const;
+  std::vector<MultiIndexMeta> find_indexs_by_field(const char *field) const;
+  const MultiIndexMeta * index(int i) const;
   int index_num() const;
 
   int record_size() const;
@@ -64,7 +65,7 @@ private:
 private:
   std::string   name_;
   std::vector<FieldMeta>  fields_; // 包含sys_fields
-  std::vector<IndexMeta>  indexes_;
+  std::vector<MultiIndexMeta>  indexes_;
 
   int  record_size_ = 0;
 
