@@ -418,11 +418,11 @@ bool SubqueryConditionFilter::filter(const Record &rec) const
       return false;
     case NOT_IN:
       for (auto& v : right_) {
-        if (tupleValue->compare(v.get(0)) != 0) {
-          return true;
+        if (tupleValue->compare(v.get(0)) == 0) {
+          return false;
         }
       }
-      return false;
+      return true;
     default:
       break;
   }
