@@ -398,13 +398,7 @@ RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const
     right.attr_length = 0;
     right.attr_offset = 0;
   }
-  long long v = 0x0100000000;
-  if (left.is_null && 0 == left.is_attr) {
-    memcpy(left.value, &v, 5);
-  }
-  if (right.is_null && 0 == right.is_attr) {
-    memcpy(right.value, &v, 5);
-  }
+
   // 校验和转换
   //  if (!field_type_compare_compatible_table[type_left][type_right]) {
   //    // 不能比较的两个字段， 要把信息传给客户端
