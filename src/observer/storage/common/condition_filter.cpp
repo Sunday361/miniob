@@ -460,73 +460,83 @@ bool SubqueryConditionFilter::filter(const Record &rec) const
     default: {
     }
   }
-
+  bool ret = false;
   switch (comp_op_) {
     case EQUAL_TO:
       if (leftTupleValue)
-        return leftTupleValue->compare(rightTuples_[0].get(0)) == 0;
+        ret = leftTupleValue->compare(rightTuples_[0].get(0)) == 0;
       else
-        return rightTupleValue->compare(leftTuples_[0].get(0)) == 0;
+        ret = rightTupleValue->compare(leftTuples_[0].get(0)) == 0;
+      break;
     case LESS_EQUAL:
       if (leftTupleValue)
-        return leftTupleValue->compare(rightTuples_[0].get(0)) <= 0;
+        ret =  leftTupleValue->compare(rightTuples_[0].get(0)) <= 0;
       else
-        return rightTupleValue->compare(leftTuples_[0].get(0)) >= 0;
+        ret =  rightTupleValue->compare(leftTuples_[0].get(0)) >= 0;
+      break;
     case NOT_EQUAL:
       if (leftTupleValue)
-        return leftTupleValue->compare(rightTuples_[0].get(0)) != 0;
+        ret =  leftTupleValue->compare(rightTuples_[0].get(0)) != 0;
       else
-        return rightTupleValue->compare(leftTuples_[0].get(0)) != 0;
+        ret =  rightTupleValue->compare(leftTuples_[0].get(0)) != 0;
     case LESS_THAN:
       if (leftTupleValue)
-        return leftTupleValue->compare(rightTuples_[0].get(0)) < 0;
+        ret =  leftTupleValue->compare(rightTuples_[0].get(0)) < 0;
       else
-        return rightTupleValue->compare(leftTuples_[0].get(0)) > 0;
+        ret =  rightTupleValue->compare(leftTuples_[0].get(0)) > 0;
+      break;
     case GREAT_EQUAL:
       if (leftTupleValue)
-        return leftTupleValue->compare(rightTuples_[0].get(0)) >= 0;
+        ret =  leftTupleValue->compare(rightTuples_[0].get(0)) >= 0;
       else
-        return rightTupleValue->compare(leftTuples_[0].get(0)) <= 0;
+        ret =  rightTupleValue->compare(leftTuples_[0].get(0)) <= 0;
+      break;
     case GREAT_THAN:
       if (leftTupleValue)
-        return leftTupleValue->compare(rightTuples_[0].get(0)) > 0;
+        ret =  leftTupleValue->compare(rightTuples_[0].get(0)) > 0;
       else
-        return rightTupleValue->compare(leftTuples_[0].get(0)) < 0;
+        ret =  rightTupleValue->compare(leftTuples_[0].get(0)) < 0;
+      break;
     case IN:
+      ret = false;
       if (leftTupleValue) {
         for (auto& r : rightTuples_) {
           if (leftTupleValue->compare(r.get(0)) == 0) {
-            return true;
+            ret = true; break;
           }
         }
       } else {
         for (auto& l : leftTuples_) {
           if (rightTupleValue->compare(l.get(0)) == 0) {
-            return true;
+            ret = true; break;
           }
         }
       }
-      return false;
+      break;
     case NOT_IN:
+      ret = true;
       if (leftTupleValue) {
         for (auto& r : rightTuples_) {
           if (leftTupleValue->compare(r.get(0)) == 0) {
-            return false;
+            ret = false;
+            break;
           }
         }
       } else {
         for (auto& l : leftTuples_) {
           if (rightTupleValue->compare(l.get(0)) == 0) {
-            return false;
+            ret = false;
+            break;
           }
         }
       }
-      return true;
+      break;
     default:
       break;
   }
-
+  if (rightTupleValue) delete rightTupleValue;
+  if (leftTupleValue) delete leftTupleValue;
+  return ret;
   LOG_PANIC("Never should print this.");
-  return 0;
 }
 SubqueryConditionFilter::~SubqueryConditionFilter() {}
