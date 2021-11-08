@@ -242,66 +242,66 @@ bool getAttrRelationName(const Selects& selects, std::string& os) {
 
 // 这里没有对输入的某些信息做合法性校验，比如查询的列名、where条件中的列名等，没有做必要的合法性校验
 // 需要补充上这一部分. 校验部分也可以放在resolve，不过跟execution放一起也没有关系
-RC ExecuteStage::do_select(const char *db, Query *sql, SessionEvent *session_event) {
-
-  RC rc = RC::SUCCESS;
-  Session *session = session_event->get_client()->session;
-  Trx *trx = session->current_trx();
-  const Selects &selects = sql->sstr.selection;
-  // 把所有的表和只跟这张表关联的condition都拿出来，生成最底层的select 执行节点
-  std::vector<SelectExeNode *> select_nodes;
-  for (size_t i = 0; i < selects.relation_num; i++) {
-    const char *table_name = selects.relations[i];
-    SelectExeNode *select_node = new SelectExeNode;
-    rc = create_selection_executor(trx, selects, db, table_name, *select_node);
-    if (rc != RC::SUCCESS) {
-      delete select_node;
-      for (SelectExeNode *& tmp_node: select_nodes) {
-        delete tmp_node;
-      }
-      end_trx_if_need(session, trx, false);
-      session_event->set_response("FAILURE\n");
-      return rc;
-    }
-    select_nodes.push_back(select_node);
-  }
-
-  if (select_nodes.empty()) {
-    LOG_ERROR("No table given");
-    end_trx_if_need(session, trx, false);
-    return RC::SQL_SYNTAX;
-  }
-
-  std::vector<TupleSet> tuple_sets;
-  for (SelectExeNode *&node: select_nodes) {
-    TupleSet tuple_set;
-    rc = node->execute(tuple_set);
-    if (rc != RC::SUCCESS) {
-      for (SelectExeNode *& tmp_node: select_nodes) {
-        delete tmp_node;
-      }
-      end_trx_if_need(session, trx, false);
-      return rc;
-    } else {
-      tuple_sets.push_back(std::move(tuple_set));
-    }
-  }
-
-  std::stringstream ss;
-  if (tuple_sets.size() > 1) {
-    // 本次查询了多张表，需要做join操作
-  } else {
-    // 当前只查询一张表，直接返回结果即可
-    tuple_sets.front().print(ss);
-  }
-
-  for (SelectExeNode *& tmp_node: select_nodes) {
-    delete tmp_node;
-  }
-  session_event->set_response(ss.str());
-  end_trx_if_need(session, trx, true);
-  return rc;
-}
+//RC ExecuteStage::do_select(const char *db, Query *sql, SessionEvent *session_event) {
+//
+//  RC rc = RC::SUCCESS;
+//  Session *session = session_event->get_client()->session;
+//  Trx *trx = session->current_trx();
+//  const Selects &selects = sql->sstr.selection;
+//  // 把所有的表和只跟这张表关联的condition都拿出来，生成最底层的select 执行节点
+//  std::vector<SelectExeNode *> select_nodes;
+//  for (size_t i = 0; i < selects.relation_num; i++) {
+//    const char *table_name = selects.relations[i];
+//    SelectExeNode *select_node = new SelectExeNode;
+//    rc = create_selection_executor(trx, selects, db, table_name, *select_node);
+//    if (rc != RC::SUCCESS) {
+//      delete select_node;
+//      for (SelectExeNode *& tmp_node: select_nodes) {
+//        delete tmp_node;
+//      }
+//      end_trx_if_need(session, trx, false);
+//      session_event->set_response("FAILURE\n");
+//      return rc;
+//    }
+//    select_nodes.push_back(select_node);
+//  }
+//
+//  if (select_nodes.empty()) {
+//    LOG_ERROR("No table given");
+//    end_trx_if_need(session, trx, false);
+//    return RC::SQL_SYNTAX;
+//  }
+//
+//  std::vector<TupleSet> tuple_sets;
+//  for (SelectExeNode *&node: select_nodes) {
+//    TupleSet tuple_set;
+//    rc = node->execute(tuple_set);
+//    if (rc != RC::SUCCESS) {
+//      for (SelectExeNode *& tmp_node: select_nodes) {
+//        delete tmp_node;
+//      }
+//      end_trx_if_need(session, trx, false);
+//      return rc;
+//    } else {
+//      tuple_sets.push_back(std::move(tuple_set));
+//    }
+//  }
+//
+//  std::stringstream ss;
+//  if (tuple_sets.size() > 1) {
+//    // 本次查询了多张表，需要做join操作
+//  } else {
+//    // 当前只查询一张表，直接返回结果即可
+//    tuple_sets.front().print(ss);
+//  }
+//
+//  for (SelectExeNode *& tmp_node: select_nodes) {
+//    delete tmp_node;
+//  }
+//  session_event->set_response(ss.str());
+//  end_trx_if_need(session, trx, true);
+//  return rc;
+// }
 
 bool match_table(const Selects &selects, const char *table_name_in_condition, const char *table_name_to_match) {
   if (table_name_in_condition != nullptr) {
@@ -410,7 +410,14 @@ RC create_selection_executor(Trx *trx, const Selects &selects, const char *db, c
         return rc;
       }
       auto *condition_filter = new SubqueryConditionFilter();
-      condition_filter->init(*table, condition, subsets.tuples());
+      rc = condition_filter->init(*table, condition, subsets.tuples());
+      if (rc != RC::SUCCESS) {
+        LOG_INFO("create condition failed");
+        for (DefaultConditionFilter * &filter : condition_filters) {
+          delete filter;
+        }
+        return rc;
+      }
       condition_filters.push_back(condition_filter);
     }
   }
