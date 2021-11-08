@@ -464,15 +464,16 @@ bool SubqueryConditionFilter::filter(const Record &rec) const
       break;
     case LESS_EQUAL:
       if (leftTupleValue)
-        ret =  leftTupleValue->compare(rightTuples_[0].get(0)) <= 0;
+        ret = leftTupleValue->compare(rightTuples_[0].get(0)) <= 0;
       else
-        ret =  rightTupleValue->compare(leftTuples_[0].get(0)) >= 0;
+        ret = rightTupleValue->compare(leftTuples_[0].get(0)) >= 0;
       break;
     case NOT_EQUAL:
       if (leftTupleValue)
-        ret =  leftTupleValue->compare(rightTuples_[0].get(0)) != 0;
+        ret = (leftTupleValue->compare(rightTuples_[0].get(0)) != 0);
       else
-        ret =  rightTupleValue->compare(leftTuples_[0].get(0)) != 0;
+        ret = (rightTupleValue->compare(leftTuples_[0].get(0)) != 0);
+      break;
     case LESS_THAN:
       if (leftTupleValue)
         ret =  leftTupleValue->compare(rightTuples_[0].get(0)) < 0;
