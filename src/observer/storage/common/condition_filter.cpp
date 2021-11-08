@@ -455,6 +455,14 @@ bool SubqueryConditionFilter::filter(const Record &rec) const
     }
   }
   bool ret = false;
+
+  if (rightTuples_.empty() && leftTuples_.empty()) {
+    if (comp_op_ == NOT_IN)
+      return true;
+    else
+      return false;
+  }
+
   switch (comp_op_) {
     case EQUAL_TO:
       if (leftTupleValue)
