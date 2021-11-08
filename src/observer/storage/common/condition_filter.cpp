@@ -349,6 +349,29 @@ RC SubqueryConditionFilter::init(const ConDesc &left, const std::vector<Tuple>& 
   return RC::SUCCESS;
 }
 
+RC SubqueryConditionFilter::init(const std::vector<Tuple>& left, const std::vector<Tuple>& right,
+                                 AttrType attr_type, CompOp comp_op) {
+  if (comp_op < EQUAL_TO || comp_op >= NO_OP) {
+    LOG_ERROR("Invalid condition with unsupported compare operation: %d", comp_op);
+    return RC::INVALID_ARGUMENT;
+  }
+
+
+  if (left.size() > 1 && right.size() > 1) {
+    return RC::INVALID_ARGUMENT;
+  }
+
+  for (auto& t : left)
+    leftTuples_.emplace_back(std::move(t));
+  for (auto& t : right)
+    rightTuples_.emplace_back(std::move(t));
+  right_.is_attr = false;
+  left_.is_attr = false;
+  attr_type_ = attr_type;
+  comp_op_ = comp_op;
+  return RC::SUCCESS;
+}
+
 RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const std::vector<Tuple>& tuples) {
   const TableMeta &table_meta = table.table_meta();
   ConDesc left;
@@ -420,10 +443,147 @@ RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const
   return RC::SUCCESS;
 }
 
+RC SubqueryConditionFilter::init(Table &table, const Condition &condition,
+        const std::vector<Tuple>& leftTuples, const std::vector<Tuple>& rightTuples) {
+  const TableMeta &table_meta = table.table_meta();
+  ConDesc left;
+  ConDesc right;
+  AttrType type_left = UNDEFINED;
+  AttrType type_right = UNDEFINED;
+
+  if (1 == condition.left_is_attr) {
+    left.is_attr = true;
+    const FieldMeta *field_left = table_meta.field(condition.left_attr.attribute_name);
+    if (nullptr == field_left) {
+      LOG_WARN("No such field in condition. %s.%s", table.name(), condition.left_attr.attribute_name);
+      return RC::SCHEMA_FIELD_MISSING;
+    }
+    left.attr_length = field_left->len();
+    left.attr_offset = field_left->offset();
+
+    left.value = nullptr;
+    left.is_null = false;
+    type_left = field_left->type();
+  } else if (0 == condition.left_is_attr){
+    left.is_attr = false;
+    left.value = condition.left_value.data;  // 校验type 或者转换类型
+    type_left = condition.left_value.type;
+    left.is_null = (type_left == NULLTYPE);
+    left.attr_length = 0;
+    left.attr_offset = 0;
+  }
+
+  if (1 == condition.right_is_attr) {
+    right.is_attr = true;
+    const FieldMeta *field_right = table_meta.field(condition.right_attr.attribute_name);
+    if (nullptr == field_right) {
+      LOG_WARN("No such field in condition. %s.%s", table.name(), condition.right_attr.attribute_name);
+      return RC::SCHEMA_FIELD_MISSING;
+    }
+    right.attr_length = field_right->len();
+    right.attr_offset = field_right->offset();
+    type_right = field_right->type();
+    right.is_null = false;
+    right.value = nullptr;
+  } else if (0 == condition.right_is_attr){
+    right.is_attr = false;
+    right.value = condition.right_value.data;
+    type_right = condition.right_value.type;
+    right.is_null = (type_right == NULLTYPE);
+    right.attr_length = 0;
+    right.attr_offset = 0;
+  }
+
+  // 校验和转换
+  if (condition.comp == IN || condition.comp == NOT_IN) {
+    if (!leftTuples.empty() && leftTuples[0].size() > 1) {
+      return RC::INVALID_ARGUMENT;
+    }
+    if (!rightTuples.empty() && rightTuples[0].size() > 1) {
+      return RC::INVALID_ARGUMENT;
+    }
+  }
+  if (condition.comp != IN && condition.comp != NOT_IN) {
+    if (rightTuples.size() > 1) {
+      return RC::INVALID_ARGUMENT;
+    }
+    if (leftTuples.size() > 1) {
+      return RC::INVALID_ARGUMENT;
+    }
+  }
+
+  if (condition.left_is_attr == 1 && condition.right_is_attr >= 2) {
+    return init(left, rightTuples, type_left, condition.comp);
+  }else if (condition.left_is_attr >= 2 && condition.right_is_attr == 1) {
+    return init(leftTuples, right, type_right, condition.comp);
+  }else if (condition.left_is_attr >= 2 && condition.right_is_attr >= 2) {
+    return init(leftTuples, rightTuples, type_left, condition.comp);
+  }
+  LOG_PANIC("Never should print this.");
+  return RC::SUCCESS;
+}
+
+bool SubqueryConditionFilter::cmpTwoTupleSets() const {
+  bool ret = false;
+  if (leftTuples_.empty() || rightTuples_.empty()) {
+    if (comp_op_ != NOT_IN) {
+      return false;
+    }else {
+      return true;
+    }
+  }
+  switch (comp_op_) {
+    case EQUAL_TO:
+      ret = leftTuples_[0].get(0).compare(rightTuples_[0].get(0)) == 0;
+      break;
+    case LESS_EQUAL:
+      ret = leftTuples_[0].get(0).compare(rightTuples_[0].get(0)) <= 0;
+      break;
+    case NOT_EQUAL:
+      ret = leftTuples_[0].get(0).compare(rightTuples_[0].get(0)) != 0;
+      break;
+    case LESS_THAN:
+      ret = leftTuples_[0].get(0).compare(rightTuples_[0].get(0)) < 0;
+      break;
+    case GREAT_EQUAL:
+      ret = leftTuples_[0].get(0).compare(rightTuples_[0].get(0)) >= 0;
+      break;
+    case GREAT_THAN:
+      ret = leftTuples_[0].get(0).compare(rightTuples_[0].get(0)) > 0;
+      break;
+    case IN:
+      for (auto& r : rightTuples_) {
+        if (leftTuples_[0].get(0).compare(r.get(0)) == 0) {
+          return true;
+        }
+      }
+      return false;
+      break;
+    case NOT_IN:
+      for (auto& r : rightTuples_) {
+        if (leftTuples_[0].get(0).compare(r.get(0)) == 0) {
+          return false;
+        }
+      }
+      return true;
+    default:
+      break;
+  }
+  return ret;
+  LOG_PANIC("Never should print this.");
+}
+
 bool SubqueryConditionFilter::filter(const Record &rec) const
 {
   char *left_value = nullptr;
   char *right_value = nullptr;
+
+  if (rightTuples_.empty() && leftTuples_.empty()) {
+    if (comp_op_ == NOT_IN)
+      return true;
+    else
+      return false;
+  }
 
   if (left_.is_attr) {  // value
     left_value = (char *)(rec.data + left_.attr_offset);
@@ -437,36 +597,48 @@ bool SubqueryConditionFilter::filter(const Record &rec) const
   TupleValue *rightTupleValue = nullptr;
   // 判断 null 比较的情况 null == null / null ！= 非null
   // 其他情况全部返回 false
-
   switch (attr_type_) {
     case CHARS: {
-      if (left_value) leftTupleValue = new StringValue(left_value);
-      if (right_value) rightTupleValue = new StringValue(right_value);
+      if (left_value) {
+        leftTupleValue = new StringValue(left_value);
+      }
+      if (right_value) {
+        rightTupleValue = new StringValue(right_value);
+      }
     } break;
     case INTS: {
-      if (left_value) leftTupleValue = new IntValue(*(int*)left_value);
-      if (right_value) rightTupleValue = new IntValue(*(int*)right_value);
+      if (left_value) {
+        leftTupleValue = new IntValue(*(int*)left_value);
+      }
+      if (right_value) {
+        rightTupleValue = new IntValue(*(int*)right_value);
+      }
     } break;
     case FLOATS: {
-      if (left_value) leftTupleValue = new FloatValue(*(float *)left_value);
-      if (right_value) rightTupleValue = new FloatValue(*(float *)right_value);
+      if (left_value) {
+        leftTupleValue = new FloatValue(*(float *)left_value);
+      }
+      if (right_value) {
+        rightTupleValue = new FloatValue(*(float *)right_value);
+      }
     } break;
     case DATES: {
-      if (left_value) leftTupleValue = new DateValue(*(int*)left_value);
-      if (right_value) rightTupleValue = new DateValue(*(int*)right_value);
+      if (left_value) {
+        leftTupleValue = new DateValue(*(int*)left_value);
+      }
+      if (right_value) {
+        rightTupleValue = new DateValue(*(int*)right_value);
+      }
     } break;
     default: {
     }
   }
-  bool ret = false;
 
-  if (rightTuples_.empty() && leftTuples_.empty()) {
-    if (comp_op_ == NOT_IN)
-      return true;
-    else
-      return false;
+  if (!leftTupleValue && !rightTupleValue) {
+    return cmpTwoTupleSets();
   }
 
+  bool ret = false;
   switch (comp_op_) {
     case EQUAL_TO:
       if (leftTupleValue)

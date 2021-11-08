@@ -90,8 +90,15 @@ class SubqueryConditionFilter : public DefaultConditionFilter{
   RC init(const ConDesc &left, const std::vector<Tuple>& right, AttrType attr_type, CompOp comp_op);
   RC init(const std::vector<Tuple>& left, const ConDesc &right, AttrType attr_type, CompOp comp_op);
   RC init(Table &table, const Condition &condition, const std::vector<Tuple>& tuples);
+  RC init(const std::vector<Tuple>& left, const std::vector<Tuple>& right,
+                                   AttrType attr_type, CompOp comp_op);
+  RC init(Table &table, const Condition &condition,
+          const std::vector<Tuple>& leftTuples, const std::vector<Tuple>& rightTuples);
 
   virtual bool filter(const Record &rec) const;
+
+  bool cmpTwoTupleSets() const;
+
 
  public:
   const ConDesc &left() const {

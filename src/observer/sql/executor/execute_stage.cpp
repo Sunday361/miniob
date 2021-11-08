@@ -397,11 +397,22 @@ RC create_selection_executor(Trx *trx, const Selects &selects, const char *db, c
       }
     }
 
-    if ((condition.left_is_attr == 1 && condition.right_is_attr >= 2) ||
-        (condition.right_is_attr == 1 && condition.left_is_attr >= 2)) { // subquery,右边就是值的数据
-      TupleSet subsets;
-      int idx = condition.left_is_attr >= 2 ? condition.left_is_attr - 2: condition.right_is_attr - 2;
-      RC rc = ExecuteStage::createNode(db, *selects.subquery[idx], subsets, trx);
+    if (condition.right_is_attr >= 2 || condition.left_is_attr >= 2) {
+      TupleSet leftSubsets, rightSubsets;
+      RC rc = RC::SUCCESS;
+      int leftIdx = condition.left_is_attr >= 2 ? condition.left_is_attr - 2 : -1;
+      int rightIdx = condition.right_is_attr >= 2 ? condition.right_is_attr - 2 : -1;
+      if (leftIdx != -1)
+        rc = ExecuteStage::createNode(db, *selects.subquery[leftIdx], leftSubsets, trx);
+      if (rc != RC::SUCCESS) {
+        LOG_INFO("create condition failed");
+        for (DefaultConditionFilter * &filter : condition_filters) {
+          delete filter;
+        }
+        return rc;
+      }
+      if (rightIdx != -1)
+        rc = ExecuteStage::createNode(db, *selects.subquery[rightIdx], rightSubsets, trx);
       if (rc != RC::SUCCESS) {
         LOG_INFO("create condition failed");
         for (DefaultConditionFilter * &filter : condition_filters) {
@@ -410,7 +421,7 @@ RC create_selection_executor(Trx *trx, const Selects &selects, const char *db, c
         return rc;
       }
       auto *condition_filter = new SubqueryConditionFilter();
-      rc = condition_filter->init(*table, condition, subsets.tuples());
+      rc = condition_filter->init(*table, condition, leftSubsets.tuples(), rightSubsets.tuples());
       if (rc != RC::SUCCESS) {
         LOG_INFO("create condition failed");
         for (DefaultConditionFilter * &filter : condition_filters) {

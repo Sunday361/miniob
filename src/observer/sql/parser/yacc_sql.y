@@ -65,9 +65,15 @@ size_t l = v->len;
 return (ParserContext*)(&(v->contexts[l+1]));
 }
 
+ParserContext* get_parent_context(yyscan_t scanner) {
+ParserVector* v = get_vector(scanner);
+size_t l = v->len;
+return (ParserContext*)(&(v->contexts[l-1]));
+}
+
 //#define CONTEXT get_context(scanner)
 #define CONTEXT get_context(scanner)
-#define LASTCONTEXT get_last_context(scanner)
+#define PARENTCONTEXT get_parent_context(scanner)
 #define CONTEXT_VECTOR get_vector(scanner)
 %}
 
@@ -803,7 +809,7 @@ condition:
 			// $$->right_attr.attribute_name=$7;
     }
     | ID DOT ID comOp LBRACE sub_query RBRACE {
-    selects_append_selects(&CONTEXT->ssql->sstr.selection, &LASTCONTEXT->ssql->sstr.selection);
+
     RelAttr left_attr;
     			relation_attr_init(&left_attr, $1, $3, NO_AGG);
     			RelAttr right_attr;
@@ -814,7 +820,7 @@ condition:
 
     }
     | ID comOp LBRACE sub_query RBRACE {
-    	selects_append_selects(&CONTEXT->ssql->sstr.selection, &LASTCONTEXT->ssql->sstr.selection);
+
              RelAttr left_attr;
              			relation_attr_init(&left_attr, NULL, $1, NO_AGG);
              			RelAttr right_attr;
@@ -825,7 +831,7 @@ condition:
 
              }
     | LBRACE sub_query RBRACE comOp ID DOT ID {
-        selects_append_selects(&CONTEXT->ssql->sstr.selection, &LASTCONTEXT->ssql->sstr.selection);
+
         RelAttr left_attr;
         			relation_attr_init(&left_attr, NULL, $7, SUBQUERY);
         			RelAttr right_attr;
@@ -836,7 +842,7 @@ condition:
 
         }
         | LBRACE sub_query RBRACE comOp ID {
-        	selects_append_selects(&CONTEXT->ssql->sstr.selection, &LASTCONTEXT->ssql->sstr.selection);
+
                  RelAttr left_attr;
                  			relation_attr_init(&left_attr, NULL, $5, SUBQUERY);
                  			RelAttr right_attr;
@@ -846,6 +852,16 @@ condition:
                                     CONTEXT->conditions[CONTEXT->condition_length++] = condition;
 
                  }
+                 | LBRACE sub_query RBRACE comOp LBRACE sub_query RBRACE {
+                         RelAttr left_attr;
+                         			relation_attr_init(&left_attr, NULL, " ", SUBQUERY);
+                         			RelAttr right_attr;
+                         			relation_attr_init(&right_attr, NULL, " ", SUBQUERY);
+                         			Condition condition;
+                 condition_init(&condition, CONTEXT->comp, CONTEXT->ssql->sstr.selection.subquery_num, &left_attr, NULL, 1+CONTEXT->ssql->sstr.selection.subquery_num, &right_attr, NULL);
+                                   		CONTEXT->conditions[CONTEXT->condition_length++] = condition;
+
+                         }
     ;
 
 sub_query:
@@ -862,7 +878,7 @@ sub_query:
 			selects_append_relation(&CONTEXT->ssql->sstr.selection, $5);
 			CONTEXT->ssql->flag=SCF_SELECT;//"select";
 			selects_append_conditions(&CONTEXT->ssql->sstr.selection, CONTEXT->conditions, CONTEXT->condition_length);
-
+			selects_append_selects(&PARENTCONTEXT->ssql->sstr.selection, &CONTEXT->ssql->sstr.selection);
 			// CONTEXT->ssql->sstr.selection.attr_num = CONTEXT->select_length;
 			//临时变量清零
 			CONTEXT_VECTOR->len--;
