@@ -400,12 +400,12 @@ RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const
   }
 
   // 校验和转换
-  if (comp_op_ == IN || comp_op_ == NOT_IN) {
+  if (condition.comp == IN || condition.comp == NOT_IN) {
     if (!tuples.empty() && tuples[0].size() > 1) {
       return RC::INVALID_ARGUMENT;
     }
   }
-  if (comp_op_ != IN && comp_op_ != NOT_IN) {
+  if (condition.comp != IN && condition.comp != NOT_IN) {
     if (tuples.size() > 1) {
       return RC::INVALID_ARGUMENT;
     }
