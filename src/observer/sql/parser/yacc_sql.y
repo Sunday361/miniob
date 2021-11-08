@@ -809,7 +809,7 @@ condition:
     			RelAttr right_attr;
     			relation_attr_init(&right_attr, NULL, $3, SUBQUERY);
     			Condition condition;
-                        condition_init(&condition, CONTEXT->comp, 1, &left_attr, NULL, 2, &right_attr, NULL);
+                        condition_init(&condition, CONTEXT->comp, 1, &left_attr, NULL, 1+CONTEXT->ssql->sstr.selection.subquery_num, &right_attr, NULL);
               		CONTEXT->conditions[CONTEXT->condition_length++] = condition;
 
     }
@@ -820,7 +820,7 @@ condition:
              			RelAttr right_attr;
              			relation_attr_init(&right_attr, NULL, $1, SUBQUERY);
              			Condition condition;
-                                condition_init(&condition, CONTEXT->comp, 1, &left_attr, NULL, 2, &right_attr, NULL);
+                                condition_init(&condition, CONTEXT->comp, 1, &left_attr, NULL, 1+CONTEXT->ssql->sstr.selection.subquery_num, &right_attr, NULL);
                                 CONTEXT->conditions[CONTEXT->condition_length++] = condition;
 
              }
@@ -831,7 +831,7 @@ condition:
         			RelAttr right_attr;
         			relation_attr_init(&right_attr, $5, $7, NO_AGG);
         			Condition condition;
-                            condition_init(&condition, CONTEXT->comp, 2, &left_attr, NULL, 1, &right_attr, NULL);
+                            condition_init(&condition, CONTEXT->comp, 1+CONTEXT->ssql->sstr.selection.subquery_num, &left_attr, NULL, 1, &right_attr, NULL);
                   		CONTEXT->conditions[CONTEXT->condition_length++] = condition;
 
         }
@@ -842,7 +842,7 @@ condition:
                  			RelAttr right_attr;
                  			relation_attr_init(&right_attr, NULL, $5, NO_AGG);
                  			Condition condition;
-                                    condition_init(&condition, CONTEXT->comp, 2, &left_attr, NULL, 1, &right_attr, NULL);
+                                    condition_init(&condition, CONTEXT->comp, 1+CONTEXT->ssql->sstr.selection.subquery_num, &left_attr, NULL, 1, &right_attr, NULL);
                                     CONTEXT->conditions[CONTEXT->condition_length++] = condition;
 
                  }

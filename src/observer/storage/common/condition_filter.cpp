@@ -413,9 +413,9 @@ RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const
   // NOTE：这里没有实现不同类型的数据比较，比如整数跟浮点数之间的对比
   // 但是选手们还是要实现。这个功能在预选赛中会出现
 
-  if (condition.right_is_attr == 2) {
+  if (condition.right_is_attr >= 2) {
     return init(left, tuples, type_left, condition.comp);
-  }else if (condition.left_is_attr == 2) {
+  }else if (condition.left_is_attr >= 2) {
     return init(tuples, right, type_right, condition.comp);
   }
   LOG_PANIC("Never should print this.");

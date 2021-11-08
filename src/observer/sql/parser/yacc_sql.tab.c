@@ -2603,7 +2603,7 @@ RelAttr attr;
     			RelAttr right_attr;
     			relation_attr_init(&right_attr, NULL, (yyvsp[-4].string), SUBQUERY);
     			Condition condition;
-                        condition_init(&condition, CONTEXT->comp, 1, &left_attr, NULL, 2, &right_attr, NULL);
+                        condition_init(&condition, CONTEXT->comp, 1, &left_attr, NULL, 1+CONTEXT->ssql->sstr.selection.subquery_num, &right_attr, NULL);
               		CONTEXT->conditions[CONTEXT->condition_length++] = condition;
 
     }
@@ -2619,7 +2619,7 @@ RelAttr attr;
              			RelAttr right_attr;
              			relation_attr_init(&right_attr, NULL, (yyvsp[-4].string), SUBQUERY);
              			Condition condition;
-                                condition_init(&condition, CONTEXT->comp, 1, &left_attr, NULL, 2, &right_attr, NULL);
+                                condition_init(&condition, CONTEXT->comp, 1, &left_attr, NULL, 1+CONTEXT->ssql->sstr.selection.subquery_num, &right_attr, NULL);
                                 CONTEXT->conditions[CONTEXT->condition_length++] = condition;
 
              }
@@ -2635,7 +2635,7 @@ RelAttr attr;
         			RelAttr right_attr;
         			relation_attr_init(&right_attr, (yyvsp[-2].string), (yyvsp[0].string), NO_AGG);
         			Condition condition;
-                            condition_init(&condition, CONTEXT->comp, 2, &left_attr, NULL, 1, &right_attr, NULL);
+                            condition_init(&condition, CONTEXT->comp, 1+CONTEXT->ssql->sstr.selection.subquery_num, &left_attr, NULL, 1, &right_attr, NULL);
                   		CONTEXT->conditions[CONTEXT->condition_length++] = condition;
 
         }
@@ -2651,7 +2651,7 @@ RelAttr attr;
                  			RelAttr right_attr;
                  			relation_attr_init(&right_attr, NULL, (yyvsp[0].string), NO_AGG);
                  			Condition condition;
-                                    condition_init(&condition, CONTEXT->comp, 2, &left_attr, NULL, 1, &right_attr, NULL);
+                                    condition_init(&condition, CONTEXT->comp, 1+CONTEXT->ssql->sstr.selection.subquery_num, &left_attr, NULL, 1, &right_attr, NULL);
                                     CONTEXT->conditions[CONTEXT->condition_length++] = condition;
 
                  }
