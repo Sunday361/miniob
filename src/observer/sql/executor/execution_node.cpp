@@ -68,14 +68,12 @@ RC AggregateExeNode::init(Trx *trx, TupleSchema &tupleSchema, TupleSchema &group
   return RC::SUCCESS;
 }
 
-RC AggregateExeNode::initHash(bool isGroup, const Key& key) {
+RC AggregateExeNode::initHash(const Key& key) {
   std::vector<TupleValue*>* v;
-  if (!isGroup) {
-    v = &values_;
-  }else {
-    gvalues_.insert({key, std::vector<TupleValue*>()});
-    v = &gvalues_[key];
-  }
+
+  gvalues_.insert({key, std::vector<TupleValue*>()});
+  v = &gvalues_[key];
+
   for (size_t i = 0; i < aggTypes_.size(); i++) {
     switch (aggTypes_[i]) {
       case COUNT_AGG:
@@ -174,19 +172,13 @@ RC AggregateExeNode::execute(TupleSet &outputSet) {
     first = 0;
     std::vector<TupleValue *>* v;
     auto key = makeKey(tuple);
-    if (groups.empty()) {
-      if (values_.empty()) {
-        initHash(false, key);
-        first = 1;
-      }
-      v = &values_;
-    } else {
-      if (0 == gvalues_.count(key)) {
-        initHash(true, key);
-        first = 1;
-      }
-      v = &gvalues_[key];
+
+    if (0 == gvalues_.count(key)) {
+      initHash(key);
+      first = 1;
     }
+    v = &gvalues_[key];
+
     for (int i = 0; i < aggTypes_.size(); i++) {
       switch (aggTypes_[i]) {
         case AVG_AGG:
@@ -232,52 +224,29 @@ RC AggregateExeNode::execute(TupleSet &outputSet) {
       }
     }
   }
-  LOG_INFO("execute agg value size %d", values_.size());
-  if (groups.empty()) {
+
+  for (auto& v : gvalues_) {
+    Tuple tuple;
     int idx = n;
     for (int i = 0; i < n; i++) {
       if (aggTypes_[i] == AVG_AGG) {
-        auto ptr = values_[i];
+        auto ptr = v.second[i];
         auto num = ptr->getValue();
-        if (values_[idx]->getValue()) {
-          values_[i] = new FloatValue(num / values_[idx]->getValue());
-          values_[i]->isNull_ = false;
-        }else {
-          values_[i] = new FloatValue(0);
-          values_[i]->isNull_ = true;
+        if (v.second[idx]->getValue()) {
+          v.second[i] = new FloatValue(num / v.second[idx]->getValue());
+          v.second[i]->isNull_ = false;
+        } else {
+          v.second[i] = new FloatValue(0);
+          v.second[i]->isNull_ = true;
         }
-        idx++;
         delete ptr;
+        idx++;
       }
-    }
-    Tuple tuple;
-    for (int i = 0; i < n; i++) {
-      tuple.add(values_[i]);
+      tuple.add(v.second[i]);
     }
     outputSet.add(std::move(tuple));
-  }else {
-    for (auto& v : gvalues_) {
-      Tuple tuple;
-      int idx = n;
-      for (int i = 0; i < n; i++) {
-        if (aggTypes_[i] == AVG_AGG) {
-          auto ptr = v.second[i];
-          auto num = ptr->getValue();
-          if (v.second[idx]->getValue()) {
-            v.second[i] = new FloatValue(num / v.second[idx]->getValue());
-            v.second[i]->isNull_ = false;
-          }else {
-            v.second[i] = new FloatValue(0);
-            v.second[i]->isNull_ = true;
-          }
-          delete ptr;
-          idx++;
-        }
-        tuple.add(v.second[i]);
-      }
-      outputSet.add(std::move(tuple));
-    }
   }
+
   return RC::SUCCESS;
 }
 

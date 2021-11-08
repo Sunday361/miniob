@@ -97,14 +97,13 @@ class AggregateExeNode : public ExecutionNode {
     }
   };
 
-  RC initHash(bool isGroup,const Key& key);
+  RC initHash(const Key& key);
 
  private:
   Trx *trx_ = nullptr;
   TupleSchema tupleSchema_;    // for agg
   TupleSchema group_;          // for group
   std::vector<AggType> aggTypes_; // agg type, one maps one in tupleSchema
-  std::vector<TupleValue*> values_;
   std::map<Key, std::vector<TupleValue*>> gvalues_;
   ExecutionNode* childNode_ = nullptr;
 };
