@@ -79,7 +79,7 @@ public:
   }
 
   float getValue() const { // special for avg
-    return value_ * 1.0;
+    return (float)value_;
   }
 private:
   int value_;
@@ -143,7 +143,7 @@ public:
   }
 
   float getValue() const { // special for avg
-    return value_ * 1.0;
+    return value_;
   }
 private:
   float value_;
