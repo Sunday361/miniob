@@ -17,6 +17,8 @@ See the Mulan PSL v2 for more details. */
 
 #include "rc.h"
 #include "sql/parser/parse.h"
+#include "sql/executor/tuple.h"
+#include <vector>
 
 struct Record;
 class Table;
@@ -76,6 +78,40 @@ public:
 private:
   ConDesc  left_;
   ConDesc  right_;
+  AttrType attr_type_ = UNDEFINED;
+  CompOp   comp_op_ = NO_OP;
+};
+
+class SubqueryConditionFilter : public DefaultConditionFilter{
+ public:
+  SubqueryConditionFilter();
+  virtual ~SubqueryConditionFilter();
+
+  RC init(const ConDesc &left, const std::vector<Tuple>& right, AttrType attr_type, CompOp comp_op);
+  RC init(Table &table, const Condition &condition, const std::vector<Tuple>& right);
+
+  virtual bool filter(const Record &rec) const;
+
+ public:
+  const ConDesc &left() const {
+    return left_;
+  }
+
+  const std::vector<Tuple> &right() const {
+    return right_;
+  }
+
+  CompOp comp_op() const {
+    return comp_op_;
+  }
+
+  bool notUseIndex() const {
+    return left_.is_null;
+  }
+
+ private:
+  ConDesc  left_;
+  std::vector<Tuple>  right_;
   AttrType attr_type_ = UNDEFINED;
   CompOp   comp_op_ = NO_OP;
 };

@@ -163,8 +163,16 @@ void selects_append_conditions(Selects *selects, Condition conditions[], size_t 
   }
   selects->condition_num = condition_num;
 }
+// 这里应该做一次深拷贝
+void selects_append_selects(Selects *selects, Selects* sub) {
+  selects->subquery[selects->subquery_num++] = (Selects*)malloc(sizeof(Selects));
+
+  memcpy(selects->subquery[selects->subquery_num - 1], sub, sizeof(Selects));
+  memset(sub, 0, sizeof(Selects));
+}
 
 void selects_destroy(Selects *selects) {
+  if (selects == nullptr) return;
   for (size_t i = 0; i < selects->attr_num; i++) {
     relation_attr_destroy(&selects->attributes[i]);
   }
@@ -189,6 +197,11 @@ void selects_destroy(Selects *selects) {
     relation_attr_destroy(&selects->orderbys[i]);
   }
   selects->orderby_num = 0;
+
+  for (size_t i = 0; i < selects->subquery_num; i++) {
+    selects_destroy(selects->subquery[i]);
+  }
+  selects->subquery_num = 0;
 }
 
 void inserts_init(Inserts *inserts, const char *relation_name, Value values[], size_t value_num) {

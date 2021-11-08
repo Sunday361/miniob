@@ -56,9 +56,14 @@ public:
 
   int compare(const TupleValue &other) const override {
     if (other.isNull()) return -1;
-    const IntValue & int_other = (const IntValue &)other;
-    if (value_ == int_other.value_) return 0;
-    return value_ > int_other.value_ ? 1 : -1;
+    float ov = other.getValue();
+
+    if ((float)value_ == ov) return 0;
+    else if ((float)value_ > ov) {
+      return 1;
+    }else {
+      return -1;
+    }
   }
 
   void addValue(const TupleValue &other) override {
@@ -111,9 +116,18 @@ public:
   }
 
   int compare(const TupleValue &other) const override {
-    const FloatValue & float_other = (const FloatValue &)other;
-    if(value_ == float_other.value_) return 0;
-    return value_ > float_other.value_ ? 1 : -1;
+    if (other.isNull()) return -1;
+    float ov = other.getValue();
+    if ((float)value_ == ov) return 0;
+    else if ((float)value_ > ov) {
+      return 1;
+    }else {
+      return -1;
+    }
+//
+//    const FloatValue & float_other = (const FloatValue &)other;
+//    if(value_ == float_other.value_) return 0;
+//    return value_ > float_other.value_ ? 1 : -1;
   }
 
   void addValue(const TupleValue &other) override {

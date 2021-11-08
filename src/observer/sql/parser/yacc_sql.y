@@ -10,18 +10,22 @@
 #include<stdlib.h>
 #include<string.h>
 
-typedef struct ParserContext {
-  Query * ssql;
-  size_t select_length;
-  size_t condition_length;
-  size_t from_length;
-  size_t value_length;
-  Value values[MAX_NUM];
-  Condition conditions[MAX_NUM];
-  CompOp comp;
-	char id[MAX_NUM];
+typedef struct _ParserContext {
+    Query * ssql;
+    size_t select_length;
+    size_t condition_length;
+    size_t from_length;
+    size_t value_length;
+    Value values[MAX_NUM];
+    Condition conditions[MAX_NUM];
+    CompOp comp;
+    char id[MAX_NUM];
 } ParserContext;
 
+typedef struct _ParserVector {
+  ParserContext contexts[MAX_NUM];
+  size_t len;
+} ParserVector;
 //获取子串
 char *substr(const char *s,int n1,int n2)/*从s中提取下标为n1~n2的字符组成一个新字符串，然后返回这个新串的首地址*/
 {
@@ -36,24 +40,35 @@ char *substr(const char *s,int n1,int n2)/*从s中提取下标为n1~n2的字符�
 
 void yyerror(yyscan_t scanner, const char *str)
 {
-  ParserContext *context = (ParserContext *)(yyget_extra(scanner));
-  query_reset(context->ssql);
-  context->ssql->flag = SCF_ERROR;
-  context->condition_length = 0;
-  context->from_length = 0;
-  context->select_length = 0;
-  context->value_length = 0;
-  context->ssql->sstr.insertion.value_num = 0;
   printf("parse sql failed. error=%s", str);
 }
 
-ParserContext *get_context(yyscan_t scanner)
+//ParserContext *get_context(yyscan_t scanner)
+//{
+//  return (ParserContext *)yyget_extra(scanner);
+//}
+
+ParserVector *get_vector(yyscan_t scanner)
 {
-  return (ParserContext *)yyget_extra(scanner);
+  return (ParserVector *)yyget_extra(scanner);
 }
 
-#define CONTEXT get_context(scanner)
+ParserContext* get_context(yyscan_t scanner) {
+ParserVector* v = get_vector(scanner);
+size_t l = v->len;
+return (ParserContext*)(&(v->contexts[l]));
+}
 
+ParserContext* get_last_context(yyscan_t scanner) {
+ParserVector* v = get_vector(scanner);
+size_t l = v->len;
+return (ParserContext*)(&(v->contexts[l+1]));
+}
+
+//#define CONTEXT get_context(scanner)
+#define CONTEXT get_context(scanner)
+#define LASTCONTEXT get_last_context(scanner)
+#define CONTEXT_VECTOR get_vector(scanner)
 %}
 
 %define api.pure full
@@ -118,6 +133,8 @@ ParserContext *get_context(yyscan_t scanner)
         OP_IS
         OP_NOT
         TEXT_T
+        OP_IN
+        OP_NOTIN
 
 %union {
   struct _Attr *attr;
@@ -126,7 +143,7 @@ ParserContext *get_context(yyscan_t scanner)
   char *string;
   int number;
   float floats;
-	char *position;
+  char *position;
 }
 
 %token <number> NUMBER
@@ -785,7 +802,51 @@ condition:
 			// $$->right_attr.relation_name=$5;
 			// $$->right_attr.attribute_name=$7;
     }
+    | ID DOT ID comOp LBRACE sub_query RBRACE {
+    selects_append_selects(&CONTEXT->ssql->sstr.selection, &LASTCONTEXT->ssql->sstr.selection);
+    RelAttr left_attr;
+    			relation_attr_init(&left_attr, $1, $3, NO_AGG);
+    			RelAttr right_attr;
+    			relation_attr_init(&right_attr, NULL, $3, SUBQUERY);
+    			Condition condition;
+                        condition_init(&condition, CONTEXT->comp, 1, &left_attr, NULL, 2, &right_attr, NULL);
+              		CONTEXT->conditions[CONTEXT->condition_length++] = condition;
+
+    }
+    | ID comOp LBRACE sub_query RBRACE {
+    	selects_append_selects(&CONTEXT->ssql->sstr.selection, &LASTCONTEXT->ssql->sstr.selection);
+             RelAttr left_attr;
+             			relation_attr_init(&left_attr, NULL, $1, NO_AGG);
+             			RelAttr right_attr;
+             			relation_attr_init(&right_attr, NULL, $1, SUBQUERY);
+             			Condition condition;
+                                condition_init(&condition, CONTEXT->comp, 1, &left_attr, NULL, 2, &right_attr, NULL);
+                                CONTEXT->conditions[CONTEXT->condition_length++] = condition;
+
+             }
     ;
+
+sub_query:
+	{
+		CONTEXT_VECTOR->len++;
+		CONTEXT->condition_length=0;
+                CONTEXT->from_length=0;
+                CONTEXT->select_length=0;
+                CONTEXT->value_length = 0;
+	}
+	SELECT select_attr FROM ID rel_list where group order
+		{
+			// CONTEXT->ssql->sstr.selection.relations[CONTEXT->from_length++]=$4;
+			selects_append_relation(&CONTEXT->ssql->sstr.selection, $5);
+			CONTEXT->ssql->flag=SCF_SELECT;//"select";
+			selects_append_conditions(&CONTEXT->ssql->sstr.selection, CONTEXT->conditions, CONTEXT->condition_length);
+
+			// CONTEXT->ssql->sstr.selection.attr_num = CONTEXT->select_length;
+			//临时变量清零
+			CONTEXT_VECTOR->len--;
+	}
+	;
+
 
 comOp:
   	  EQ { CONTEXT->comp = EQUAL_TO; }
@@ -796,6 +857,9 @@ comOp:
     | NE { CONTEXT->comp = NOT_EQUAL; }
     | OP_IS {CONTEXT->comp = IS;}
     | OP_NOT {CONTEXT->comp = IS_NOT;}
+    | OP_IN {CONTEXT->comp = IN;}
+    | OP_NOTIN {CONTEXT->comp = NOT_IN;}
+
     ;
 
 load_data:
@@ -810,14 +874,24 @@ load_data:
 extern void scan_string(const char *str, yyscan_t scanner);
 
 int sql_parse(const char *s, Query *sqls){
-	ParserContext context;
-	memset(&context, 0, sizeof(context));
+	ParserVector contextVector;
+	memset(&contextVector, 0, sizeof(contextVector));
+
+	for (int i = 1; i < MAX_NUM; i++) {
+	contextVector.contexts[i].ssql = (Query*)malloc(sizeof(Query));
+	memset(contextVector.contexts[i].ssql, 0, sizeof(Query));
+	}
 
 	yyscan_t scanner;
-	yylex_init_extra(&context, &scanner);
-	context.ssql = sqls;
+	yylex_init_extra(&contextVector, &scanner);
+	contextVector.contexts[0].ssql = sqls;
 	scan_string(s, scanner);
 	int result = yyparse(scanner);
 	yylex_destroy(scanner);
+
+        for (int i = 1; i < MAX_NUM; i++) {
+        	contextVector.contexts[i].ssql = (Query*)malloc(sizeof(Query));
+        	memset(contextVector.contexts[i].ssql, 0, sizeof(Query));
+        }
 	return result;
 }

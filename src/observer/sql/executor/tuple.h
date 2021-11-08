@@ -36,6 +36,7 @@ public:
   Tuple(Tuple &&other) noexcept ;
   Tuple & operator=(Tuple &&other) noexcept ;
 
+
   void add(TupleValue *value);
   void add(const std::shared_ptr<TupleValue> &other);
   void add(int value);

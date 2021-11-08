@@ -16,8 +16,9 @@ See the Mulan PSL v2 for more details. */
 #define __OBSERVER_SQL_EXECUTE_STAGE_H__
 
 #include "common/seda/stage.h"
-#include "sql/parser/parse.h"
+#include "execution_node.h"
 #include "rc.h"
+#include "sql/parser/parse.h"
 
 class SessionEvent;
 
@@ -26,7 +27,9 @@ public:
   ~ExecuteStage();
   static Stage *make_stage(const std::string &tag);
 
-protected:
+  static RC createNode(const char *db, const Selects& selects, TupleSet& SetAns, Trx *trx);
+
+ protected:
   // common function
   ExecuteStage(const char *tag);
   bool set_properties() override;

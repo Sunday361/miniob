@@ -28,7 +28,8 @@ typedef enum {
   MAX_AGG,
   MIN_AGG,
   AVG_AGG,
-  NO_AGG
+  NO_AGG,
+  SUBQUERY,
 }AggType;
 
 typedef struct {
@@ -46,6 +47,8 @@ typedef enum {
   GREAT_THAN,   //">"     5
   IS,           // 仅用于 null
   IS_NOT,       // 仅用于 null
+  IN,           // 用于 子查询
+  NOT_IN,
   NO_OP
 } CompOp;
 
@@ -65,13 +68,13 @@ typedef struct _Condition {
   RelAttr left_attr;   // left-hand side attribute
   CompOp comp;         // comparison operator
   int right_is_attr;   // TRUE if right-hand side is an attribute
-                       // 1时，操作符右边是属性名，0时，是属性值
+                       // 1时，操作符右边是属性名，0时，是属性值 1 的 时候表示 子查询
   RelAttr right_attr;  // right-hand side attribute if right_is_attr = TRUE 右边的属性
   Value right_value;   // right-hand side value if right_is_attr = FALSE
 } Condition;
 
 // struct of select
-typedef struct {
+typedef struct _Selects {
   size_t    attr_num;               // Length of attrs in Select clause
   RelAttr   attributes[MAX_NUM];    // attrs in Select clause
   size_t    relation_num;           // Length of relations in Fro clause
@@ -82,6 +85,8 @@ typedef struct {
   RelAttr   groupbys[MAX_NUM];    // attrs in Group clause
   size_t    orderby_num;          // Length of attrs in Group clause
   RelAttr   orderbys[MAX_NUM];    // attrs in Group clause
+  size_t    subquery_num;
+  struct _Selects* subquery[MAX_NUM];
 } Selects;
 
 // struct of insert
@@ -219,6 +224,7 @@ void selects_append_attribute(Selects *selects, RelAttr *rel_attr);
 void selects_append_groupbys(Selects *selects, RelAttr *rel_attr);
 void selects_append_relation(Selects *selects, const char *relation_name);
 void selects_append_conditions(Selects *selects, Condition conditions[], size_t condition_num);
+void selects_append_selects(Selects *selects, Selects* sub);
 void selects_destroy(Selects *selects);
 
 void inserts_init(Inserts *inserts, const char *relation_name, Value values[], size_t value_num);

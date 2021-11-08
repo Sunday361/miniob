@@ -290,3 +290,144 @@ bool CompositeConditionFilter::filter(const Record &rec) const
   }
   return true;
 }
+
+SubqueryConditionFilter::SubqueryConditionFilter()
+{
+  left_.is_attr = false;
+  left_.attr_length = 0;
+  left_.attr_offset = 0;
+  left_.value = nullptr;
+
+  right_.clear();
+}
+
+RC SubqueryConditionFilter::init(const ConDesc &left, const std::vector<Tuple>& right,
+                                 AttrType attr_type, CompOp comp_op) {
+  if (attr_type < CHARS || attr_type > NULLTYPE) {
+    LOG_ERROR("Invalid condition with unsupported attribute type: %d", attr_type);
+    return RC::INVALID_ARGUMENT;
+  }
+
+  if (comp_op < EQUAL_TO || comp_op >= NO_OP) {
+    LOG_ERROR("Invalid condition with unsupported compare operation: %d", comp_op);
+    return RC::INVALID_ARGUMENT;
+  }
+
+  left_ = left;
+  for (auto& t : right)
+    right_.emplace_back(std::move(t));
+  attr_type_ = attr_type;
+  comp_op_ = comp_op;
+  return RC::SUCCESS;
+}
+
+RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const std::vector<Tuple>& right) {
+  const TableMeta &table_meta = table.table_meta();
+  ConDesc left;
+
+  AttrType type_left = UNDEFINED;
+  AttrType type_right = UNDEFINED;
+
+  if (1 == condition.left_is_attr) {
+    left.is_attr = true;
+    const FieldMeta *field_left = table_meta.field(condition.left_attr.attribute_name);
+    if (nullptr == field_left) {
+      LOG_WARN("No such field in condition. %s.%s", table.name(), condition.left_attr.attribute_name);
+      return RC::SCHEMA_FIELD_MISSING;
+    }
+    left.attr_length = field_left->len();
+    left.attr_offset = field_left->offset();
+
+    left.value = nullptr;
+    left.is_null = false;
+    type_left = field_left->type();
+  } else {
+    left.is_attr = false;
+    left.value = condition.left_value.data;  // 校验type 或者转换类型
+    type_left = condition.left_value.type;
+    left.is_null = (type_left == NULLTYPE);
+    left.attr_length = 0;
+    left.attr_offset = 0;
+  }
+
+  long long v = 0x0100000000;
+  if (left.is_null && !left.is_attr) {
+    memcpy(left.value, &v, 5);
+  }
+  // 校验和转换
+  //  if (!field_type_compare_compatible_table[type_left][type_right]) {
+  //    // 不能比较的两个字段， 要把信息传给客户端
+  //    return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+  //  }
+  // NOTE：这里没有实现不同类型的数据比较，比如整数跟浮点数之间的对比
+  // 但是选手们还是要实现。这个功能在预选赛中会出现
+
+  return init(left, right, type_left, condition.comp);
+}
+
+bool SubqueryConditionFilter::filter(const Record &rec) const
+{
+  char *left_value = nullptr;
+
+  if (left_.is_attr) {  // value
+    left_value = (char *)(rec.data + left_.attr_offset);
+  } else {
+    left_value = (char *)left_.value;
+  }
+
+  TupleValue *tupleValue;
+  // 判断 null 比较的情况 null == null / null ！= 非null
+  // 其他情况全部返回 false
+
+  switch (attr_type_) {
+    case CHARS: {
+      tupleValue = new StringValue(left_value);
+    } break;
+    case INTS: {
+      tupleValue = new IntValue(*(int *)left_value);
+    } break;
+    case FLOATS: {
+      tupleValue = new FloatValue(*(float *)left_value);
+    } break;
+    case DATES: {
+      tupleValue = new DateValue(*(int *)left_value);
+    } break;
+    default: {
+    }
+  }
+
+  switch (comp_op_) {
+    case EQUAL_TO:
+      return tupleValue->compare(right_[0].get(0)) == 0;
+    case LESS_EQUAL:
+      return tupleValue->compare(right_[0].get(0)) <= 0;
+    case NOT_EQUAL:
+      return tupleValue->compare(right_[0].get(0)) != 0;
+    case LESS_THAN:
+      return tupleValue->compare(right_[0].get(0)) == -1;
+    case GREAT_EQUAL:
+      return tupleValue->compare(right_[0].get(0)) >= 0;
+    case GREAT_THAN:
+      return tupleValue->compare(right_[0].get(0)) == 1;
+    case IN:
+      for (auto& v : right_) {
+        if (tupleValue->compare(v.get(0)) == 0) {
+          return true;
+        }
+      }
+      return false;
+    case NOT_IN:
+      for (auto& v : right_) {
+        if (tupleValue->compare(v.get(0)) != 0) {
+          return true;
+        }
+      }
+      return false;
+    default:
+      break;
+  }
+
+  LOG_PANIC("Never should print this.");
+  return 0;
+}
+SubqueryConditionFilter::~SubqueryConditionFilter() {}
