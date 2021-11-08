@@ -297,9 +297,36 @@ SubqueryConditionFilter::SubqueryConditionFilter()
   left_.attr_length = 0;
   left_.attr_offset = 0;
   left_.value = nullptr;
+  leftTuples_.clear();
 
-  right_.clear();
+  right_.is_attr = false;
+  right_.attr_length = 0;
+  right_.attr_offset = 0;
+  right_.value = nullptr;
+  rightTuples_.clear();
 }
+
+RC SubqueryConditionFilter::init(const std::vector<Tuple>& left, const ConDesc &right,
+                                 AttrType attr_type, CompOp comp_op) {
+  if (attr_type < CHARS || attr_type > NULLTYPE) {
+    LOG_ERROR("Invalid condition with unsupported attribute type: %d", attr_type);
+    return RC::INVALID_ARGUMENT;
+  }
+
+  if (comp_op < EQUAL_TO || comp_op >= NO_OP) {
+    LOG_ERROR("Invalid condition with unsupported compare operation: %d", comp_op);
+    return RC::INVALID_ARGUMENT;
+  }
+
+  for (auto& t : left)
+    leftTuples_.emplace_back(std::move(t));
+  left_.is_attr = false;
+  right_ = right;
+  attr_type_ = attr_type;
+  comp_op_ = comp_op;
+  return RC::SUCCESS;
+}
+
 
 RC SubqueryConditionFilter::init(const ConDesc &left, const std::vector<Tuple>& right,
                                  AttrType attr_type, CompOp comp_op) {
@@ -315,16 +342,17 @@ RC SubqueryConditionFilter::init(const ConDesc &left, const std::vector<Tuple>& 
 
   left_ = left;
   for (auto& t : right)
-    right_.emplace_back(std::move(t));
+    rightTuples_.emplace_back(std::move(t));
+  right_.is_attr = false;
   attr_type_ = attr_type;
   comp_op_ = comp_op;
   return RC::SUCCESS;
 }
 
-RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const std::vector<Tuple>& right) {
+RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const std::vector<Tuple>& tuples) {
   const TableMeta &table_meta = table.table_meta();
   ConDesc left;
-
+  ConDesc right;
   AttrType type_left = UNDEFINED;
   AttrType type_right = UNDEFINED;
 
@@ -341,7 +369,7 @@ RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const
     left.value = nullptr;
     left.is_null = false;
     type_left = field_left->type();
-  } else {
+  } else if (0 == condition.left_is_attr){
     left.is_attr = false;
     left.value = condition.left_value.data;  // 校验type 或者转换类型
     type_left = condition.left_value.type;
@@ -350,9 +378,32 @@ RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const
     left.attr_offset = 0;
   }
 
+  if (1 == condition.right_is_attr) {
+    right.is_attr = true;
+    const FieldMeta *field_right = table_meta.field(condition.right_attr.attribute_name);
+    if (nullptr == field_right) {
+      LOG_WARN("No such field in condition. %s.%s", table.name(), condition.right_attr.attribute_name);
+      return RC::SCHEMA_FIELD_MISSING;
+    }
+    right.attr_length = field_right->len();
+    right.attr_offset = field_right->offset();
+    type_right = field_right->type();
+    right.is_null = false;
+    right.value = nullptr;
+  } else if (0 == condition.right_is_attr){
+    right.is_attr = false;
+    right.value = condition.right_value.data;
+    type_right = condition.right_value.type;
+    right.is_null = (type_right == NULLTYPE);
+    right.attr_length = 0;
+    right.attr_offset = 0;
+  }
   long long v = 0x0100000000;
-  if (left.is_null && !left.is_attr) {
+  if (left.is_null && 0 == left.is_attr) {
     memcpy(left.value, &v, 5);
+  }
+  if (right.is_null && 0 == right.is_attr) {
+    memcpy(right.value, &v, 5);
   }
   // 校验和转换
   //  if (!field_type_compare_compatible_table[type_left][type_right]) {
@@ -362,35 +413,49 @@ RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const
   // NOTE：这里没有实现不同类型的数据比较，比如整数跟浮点数之间的对比
   // 但是选手们还是要实现。这个功能在预选赛中会出现
 
-  return init(left, right, type_left, condition.comp);
+  if (condition.right_is_attr == 2) {
+    return init(left, tuples, type_left, condition.comp);
+  }else if (condition.left_is_attr == 2) {
+    return init(tuples, right, type_right, condition.comp);
+  }
+  LOG_PANIC("Never should print this.");
+  return RC::SUCCESS;
 }
 
 bool SubqueryConditionFilter::filter(const Record &rec) const
 {
   char *left_value = nullptr;
+  char *right_value = nullptr;
 
   if (left_.is_attr) {  // value
     left_value = (char *)(rec.data + left_.attr_offset);
-  } else {
-    left_value = (char *)left_.value;
   }
 
-  TupleValue *tupleValue;
+  if (right_.is_attr) {  // value
+    right_value = (char *)(rec.data + right_.attr_offset);
+  }
+
+  TupleValue *leftTupleValue = nullptr;
+  TupleValue *rightTupleValue = nullptr;
   // 判断 null 比较的情况 null == null / null ！= 非null
   // 其他情况全部返回 false
 
   switch (attr_type_) {
     case CHARS: {
-      tupleValue = new StringValue(left_value);
+      if (left_value) leftTupleValue = new StringValue(left_value);
+      if (right_value) rightTupleValue = new StringValue(right_value);
     } break;
     case INTS: {
-      tupleValue = new IntValue(*(int *)left_value);
+      if (left_value) leftTupleValue = new IntValue(*(int*)left_value);
+      if (right_value) rightTupleValue = new IntValue(*(int*)right_value);
     } break;
     case FLOATS: {
-      tupleValue = new FloatValue(*(float *)left_value);
+      if (left_value) leftTupleValue = new FloatValue(*(float *)left_value);
+      if (right_value) rightTupleValue = new FloatValue(*(float *)right_value);
     } break;
     case DATES: {
-      tupleValue = new DateValue(*(int *)left_value);
+      if (left_value) leftTupleValue = new DateValue(*(int*)left_value);
+      if (right_value) rightTupleValue = new DateValue(*(int*)right_value);
     } break;
     default: {
     }
@@ -398,28 +463,62 @@ bool SubqueryConditionFilter::filter(const Record &rec) const
 
   switch (comp_op_) {
     case EQUAL_TO:
-      return tupleValue->compare(right_[0].get(0)) == 0;
+      if (leftTupleValue)
+        return leftTupleValue->compare(rightTuples_[0].get(0)) == 0;
+      else
+        return rightTupleValue->compare(leftTuples_[0].get(0)) == 0;
     case LESS_EQUAL:
-      return tupleValue->compare(right_[0].get(0)) <= 0;
+      if (leftTupleValue)
+        return leftTupleValue->compare(rightTuples_[0].get(0)) <= 0;
+      else
+        return rightTupleValue->compare(leftTuples_[0].get(0)) >= 0;
     case NOT_EQUAL:
-      return tupleValue->compare(right_[0].get(0)) != 0;
+      if (leftTupleValue)
+        return leftTupleValue->compare(rightTuples_[0].get(0)) != 0;
+      else
+        return rightTupleValue->compare(leftTuples_[0].get(0)) != 0;
     case LESS_THAN:
-      return tupleValue->compare(right_[0].get(0)) == -1;
+      if (leftTupleValue)
+        return leftTupleValue->compare(rightTuples_[0].get(0)) < 0;
+      else
+        return rightTupleValue->compare(leftTuples_[0].get(0)) > 0;
     case GREAT_EQUAL:
-      return tupleValue->compare(right_[0].get(0)) >= 0;
+      if (leftTupleValue)
+        return leftTupleValue->compare(rightTuples_[0].get(0)) >= 0;
+      else
+        return rightTupleValue->compare(leftTuples_[0].get(0)) <= 0;
     case GREAT_THAN:
-      return tupleValue->compare(right_[0].get(0)) == 1;
+      if (leftTupleValue)
+        return leftTupleValue->compare(rightTuples_[0].get(0)) > 0;
+      else
+        return rightTupleValue->compare(leftTuples_[0].get(0)) < 0;
     case IN:
-      for (auto& v : right_) {
-        if (tupleValue->compare(v.get(0)) == 0) {
-          return true;
+      if (leftTupleValue) {
+        for (auto& r : rightTuples_) {
+          if (leftTupleValue->compare(r.get(0)) == 0) {
+            return true;
+          }
+        }
+      } else {
+        for (auto& l : leftTuples_) {
+          if (rightTupleValue->compare(l.get(0)) == 0) {
+            return true;
+          }
         }
       }
       return false;
     case NOT_IN:
-      for (auto& v : right_) {
-        if (tupleValue->compare(v.get(0)) == 0) {
-          return false;
+      if (leftTupleValue) {
+        for (auto& r : rightTuples_) {
+          if (leftTupleValue->compare(r.get(0)) == 0) {
+            return false;
+          }
+        }
+      } else {
+        for (auto& l : leftTuples_) {
+          if (rightTupleValue->compare(l.get(0)) == 0) {
+            return false;
+          }
         }
       }
       return true;

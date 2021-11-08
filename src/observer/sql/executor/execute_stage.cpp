@@ -397,7 +397,8 @@ RC create_selection_executor(Trx *trx, const Selects &selects, const char *db, c
       }
     }
 
-    if (condition.left_is_attr == 1 && condition.right_is_attr == 2) { // subquery,右边就是值的数据
+    if ((condition.left_is_attr == 1 && condition.right_is_attr == 2) ||
+        (condition.right_is_attr == 1 && condition.left_is_attr == 2)) { // subquery,右边就是值的数据
       TupleSet subsets;
       RC rc = ExecuteStage::createNode(db, *selects.subquery[0], subsets, trx);
       if (rc != RC::SUCCESS) {
@@ -615,7 +616,7 @@ RC ExecuteStage::createNode(const char *db, const Selects& selects, TupleSet& Se
     return rc;
   }
   LOG_INFO("execute over");
-  std::stringstream ss;
+
   TupleSet outputs;
   TupleSchema outputSchema;
   bool isInEqualOut = false;

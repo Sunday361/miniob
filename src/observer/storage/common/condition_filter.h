@@ -88,7 +88,8 @@ class SubqueryConditionFilter : public DefaultConditionFilter{
   virtual ~SubqueryConditionFilter();
 
   RC init(const ConDesc &left, const std::vector<Tuple>& right, AttrType attr_type, CompOp comp_op);
-  RC init(Table &table, const Condition &condition, const std::vector<Tuple>& right);
+  RC init(const std::vector<Tuple>& left, const ConDesc &right, AttrType attr_type, CompOp comp_op);
+  RC init(Table &table, const Condition &condition, const std::vector<Tuple>& tuples);
 
   virtual bool filter(const Record &rec) const;
 
@@ -96,8 +97,7 @@ class SubqueryConditionFilter : public DefaultConditionFilter{
   const ConDesc &left() const {
     return left_;
   }
-
-  const std::vector<Tuple> &right() const {
+  const ConDesc &right() const {
     return right_;
   }
 
@@ -106,12 +106,17 @@ class SubqueryConditionFilter : public DefaultConditionFilter{
   }
 
   bool notUseIndex() const {
-    return left_.is_null;
+    return left_.is_null || right_.is_null;
   }
 
  private:
-  ConDesc  left_;
-  std::vector<Tuple>  right_;
+  // should be used one of them
+
+  ConDesc left_;
+  ConDesc right_;
+
+  std::vector<Tuple> leftTuples_;
+  std::vector<Tuple> rightTuples_;
   AttrType attr_type_ = UNDEFINED;
   CompOp   comp_op_ = NO_OP;
 };

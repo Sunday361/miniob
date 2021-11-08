@@ -824,6 +824,28 @@ condition:
                                 CONTEXT->conditions[CONTEXT->condition_length++] = condition;
 
              }
+    | LBRACE sub_query RBRACE comOp ID DOT ID {
+        selects_append_selects(&CONTEXT->ssql->sstr.selection, &LASTCONTEXT->ssql->sstr.selection);
+        RelAttr left_attr;
+        			relation_attr_init(&left_attr, NULL, $7, SUBQUERY);
+        			RelAttr right_attr;
+        			relation_attr_init(&right_attr, $5, $7, NO_AGG);
+        			Condition condition;
+                            condition_init(&condition, CONTEXT->comp, 2, &left_attr, NULL, 1, &right_attr, NULL);
+                  		CONTEXT->conditions[CONTEXT->condition_length++] = condition;
+
+        }
+        | LBRACE sub_query RBRACE comOp ID {
+        	selects_append_selects(&CONTEXT->ssql->sstr.selection, &LASTCONTEXT->ssql->sstr.selection);
+                 RelAttr left_attr;
+                 			relation_attr_init(&left_attr, NULL, $5, SUBQUERY);
+                 			RelAttr right_attr;
+                 			relation_attr_init(&right_attr, NULL, $5, NO_AGG);
+                 			Condition condition;
+                                    condition_init(&condition, CONTEXT->comp, 2, &left_attr, NULL, 1, &right_attr, NULL);
+                                    CONTEXT->conditions[CONTEXT->condition_length++] = condition;
+
+                 }
     ;
 
 sub_query:
