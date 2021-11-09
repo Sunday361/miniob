@@ -699,10 +699,12 @@ bool SubqueryConditionFilter::filter(const Record &rec) const
       if (desc.is_attr) {
         if (desc.leftOrRight == 1) {
           leftSelects_->conditions[i].left_is_attr = 0;
+          leftSelects_->conditions[i].left_value.data = malloc(desc.attr_length);
           memcpy(leftSelects_->conditions[i].left_value.data, rec.data+desc.attr_offset, desc.attr_length);
           leftSelects_->conditions[i].left_value.type = desc.attr_type;
         }else {
           leftSelects_->conditions[i].right_is_attr = 0;
+          leftSelects_->conditions[i].right_value.data = malloc(desc.attr_length);
           memcpy(leftSelects_->conditions[i].right_value.data, rec.data+desc.attr_offset, desc.attr_length);
           leftSelects_->conditions[i].right_value.type = desc.attr_type;
         }
@@ -716,10 +718,12 @@ bool SubqueryConditionFilter::filter(const Record &rec) const
       if (desc.is_attr) {
         if (desc.leftOrRight == 1) {
           rightSelects_->conditions[i].left_is_attr = 0;
+          rightSelects_->conditions[i].left_value.data = malloc(desc.attr_length);
           memcpy(rightSelects_->conditions[i].left_value.data, rec.data+desc.attr_offset, desc.attr_length);
           rightSelects_->conditions[i].left_value.type = desc.attr_type;
         }else {
           rightSelects_->conditions[i].right_is_attr = 0;
+          rightSelects_->conditions[i].right_value.data = malloc(desc.attr_length);
           memcpy(rightSelects_->conditions[i].right_value.data, rec.data+desc.attr_offset, desc.attr_length);
           rightSelects_->conditions[i].right_value.type = desc.attr_type;
         }
@@ -745,8 +749,7 @@ bool SubqueryConditionFilter::filter(const Record &rec) const
 
   TupleValue *leftTupleValue = nullptr;
   TupleValue *rightTupleValue = nullptr;
-  // 判断 null 比较的情况 null == null / null ！= 非null
-  // 其他情况全部返回 false
+
   switch (attr_type_) {
     case CHARS: {
       if (left_value) {
@@ -818,15 +821,15 @@ bool SubqueryConditionFilter::filter(const Record &rec) const
       break;
     case GREAT_EQUAL:
       if (leftTupleValue)
-        ret =  leftTupleValue->compare(rs[0].get(0)) >= 0;
+        ret = leftTupleValue->compare(rs[0].get(0)) >= 0;
       else
-        ret =  rightTupleValue->compare(ls[0].get(0)) <= 0;
+        ret = rightTupleValue->compare(ls[0].get(0)) <= 0;
       break;
     case GREAT_THAN:
       if (leftTupleValue)
-        ret =  leftTupleValue->compare(rs[0].get(0)) > 0;
+        ret = leftTupleValue->compare(rs[0].get(0)) > 0;
       else
-        ret =  rightTupleValue->compare(ls[0].get(0)) < 0;
+        ret = rightTupleValue->compare(ls[0].get(0)) < 0;
       break;
     case IN:
       ret = false;
