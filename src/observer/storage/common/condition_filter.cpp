@@ -872,6 +872,6 @@ bool SubqueryConditionFilter::filter(const Record &rec) const
 }
 SubqueryConditionFilter::~SubqueryConditionFilter() {
   if (db_) {
-    delete db_;
+    free(db_);
   }
 }

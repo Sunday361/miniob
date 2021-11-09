@@ -801,7 +801,7 @@ RC ExecuteStage::select(const char *db, Query *sql, SessionEvent *session_event)
         const char *table_name = selects.relations[j];
         Table *table = DefaultHandler::get_default().find_table(db, table_name);
         if (nullptr == attr.relation_name || 0 == strcmp(table_name, attr.relation_name)) {
-          RC rc = schema_add_field(table, attr.attribute_name, outputSchema);
+          rc = schema_add_field(table, attr.attribute_name, outputSchema);
           if (rc != RC::SUCCESS) {
             session_event->set_response("FAILURE\n");
             return rc;
