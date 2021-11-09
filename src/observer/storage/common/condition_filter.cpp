@@ -387,7 +387,6 @@ RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const
     left_.value = nullptr;
     left_.is_null = false;
     type_left = field_left->type();
-    attr_type_ = type_left;
   } else if (0 == condition.left_is_attr){
     left_.is_attr = false;
     left_.value = condition.left_value.data;  // 校验type 或者转换类型
@@ -418,7 +417,6 @@ RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const
     right_.attr_length = 0;
     right_.attr_offset = 0;
   }
-
 
   /**
    * 这里对子查询的条件做一下判断
@@ -461,13 +459,15 @@ RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const
    * */
 
   if (subquery1 && !isRelated1) {
-    ExecuteStage::createNode(db_, *subquery1, leftSets_, trx_);
+    RC rc = ExecuteStage::createNode(db_, *subquery1, leftSets_, trx_);
+    if (rc != RC::SUCCESS) return rc;
   }else if (subquery1) {
     leftSelects_ = subquery1;
   }
   
   if (subquery2 && !isRelated2) {
-    ExecuteStage::createNode(db_, *subquery2, rightSets_, trx_);
+    RC rc = ExecuteStage::createNode(db_, *subquery2, rightSets_, trx_);
+    if (rc != RC::SUCCESS) return rc;
   }else if (subquery2) {
     rightSelects_ = subquery2;
   }
@@ -490,7 +490,7 @@ RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const
   if (leftSelects_ && isRelated1) { // 根据 table 和 condition 里的条件 判断出 应该选择 record 中的 offset len type
     for (int i = 0; i < leftSelects_->condition_num; i++) {
       const Condition &cond = leftSelects_->conditions[i];
-      ReplDesc desc;
+      ReplDesc desc{};
       if (cond.left_is_attr == 1 && 0 == strcmp(cond.left_attr.relation_name, table.name())) {
         auto field = table_meta.field(cond.left_attr.attribute_name);
         if (field == nullptr) {
@@ -514,14 +514,14 @@ RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const
           desc.attr_type = field->type();
         }
       }
-      leftReplDesc_.emplace_back(std::move(desc));
+      leftReplDesc_.emplace_back(desc);
     }
   }
 
   if (rightSelects_ && isRelated2) { // 根据 table 和 condition 里的条件 判断出 应该选择 record 中的 offset len type
     for (int i = 0; i < rightSelects_->condition_num; i++) {
       const Condition &cond = rightSelects_->conditions[i];
-      ReplDesc desc;
+      ReplDesc desc{};
       if (cond.left_is_attr == 1 && 0 == strcmp(cond.left_attr.relation_name, table.name())) {
         auto field = table_meta.field(cond.left_attr.attribute_name);
         if (field == nullptr) {
@@ -545,7 +545,7 @@ RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const
           desc.attr_type = field->type();
         }
       }
-      rightReplDesc_.emplace_back(std::move(desc));
+      rightReplDesc_.emplace_back(desc);
     }
   }
   if (subquery1) left_.is_attr = false;
@@ -672,7 +672,6 @@ bool SubqueryConditionFilter::cmpTwoTupleSets() const {
         }
       }
       return false;
-      break;
     case NOT_IN:
       for (auto& t : r) {
         if (l[0].get(0).compare(t.get(0)) == 0) {
@@ -707,7 +706,7 @@ bool SubqueryConditionFilter::filter(const Record &rec) const
         }
       }
     }
-    RC rc = ExecuteStage::createNode(db_, *leftSelects_, leftSets_, trx_);
+    ExecuteStage::createNode(db_, *leftSelects_, leftSets_, trx_);
   }
   if (rightSelects_) {
     for (int i = 0; i < rightReplDesc_.size(); i++) {
@@ -724,7 +723,7 @@ bool SubqueryConditionFilter::filter(const Record &rec) const
         }
       }
     }
-    RC rc = ExecuteStage::createNode(db_, *rightSelects_, rightSets_, trx_);
+    ExecuteStage::createNode(db_, *rightSelects_, rightSets_, trx_);
   }
 
   if (rightSets_.tuples().empty() && leftSets_.tuples().empty()) {
@@ -871,6 +870,6 @@ bool SubqueryConditionFilter::filter(const Record &rec) const
 }
 SubqueryConditionFilter::~SubqueryConditionFilter() {
   if (db_) {
-    free(db_);
+    delete db_;
   }
 }

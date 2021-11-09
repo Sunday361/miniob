@@ -99,12 +99,12 @@ class SubqueryConditionFilter : public DefaultConditionFilter{
   SubqueryConditionFilter();
   virtual ~SubqueryConditionFilter();
 
-  RC init(const ConDesc &left, const std::vector<Tuple>& right, AttrType attr_type, CompOp comp_op);
-  RC init(const std::vector<Tuple>& left, const ConDesc &right, AttrType attr_type, CompOp comp_op);
-  RC init(const std::vector<Tuple>& left, const std::vector<Tuple>& right,
-          AttrType attr_type, CompOp comp_op);
-  RC init(Table &table, const Condition &condition,
-          const std::vector<Tuple>& leftTuples, const std::vector<Tuple>& rightTuples);
+//  RC init(const ConDesc &left, const std::vector<Tuple>& right, AttrType attr_type, CompOp comp_op);
+//  RC init(const std::vector<Tuple>& left, const ConDesc &right, AttrType attr_type, CompOp comp_op);
+//  RC init(const std::vector<Tuple>& left, const std::vector<Tuple>& right,
+//          AttrType attr_type, CompOp comp_op);
+//  RC init(Table &table, const Condition &condition,
+//          const std::vector<Tuple>& leftTuples, const std::vector<Tuple>& rightTuples);
 
   RC init(Table &table, const Condition &condition, const char *db, Trx* trx,
           Selects *subquery1, Selects *subquery2, int isRelated1, int isRelated2);
