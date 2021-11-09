@@ -366,8 +366,44 @@ SubqueryConditionFilter::SubqueryConditionFilter()
 //  return RC::SUCCESS;
 //}
 
+bool findNode(Selects *selects, const char *rel_name, const FieldMeta *meta,
+              std::unordered_map<Selects*, ReplDesc>& maps) {
+  bool ans = false;
+  if (!selects) return ans;
+  for (int i = 0; i < selects->condition_num; i++) {
+    const Condition& cond = selects->conditions[i];
+    if (cond.left_is_attr == 1 && 0 == strcmp(cond.left_attr.relation_name, rel_name) &&
+        0 == strcmp(cond.left_attr.attribute_name, meta->name())) {
+      ReplDesc desc{};
+      desc.attr_type = meta->type();
+      desc.attr_length = meta->len();
+      desc.attr_offset = meta->offset();
+      desc.leftOrRight = 1;
+      desc.condition_num = i;
+      maps[selects] = desc;
+      ans = true;
+    }
+
+    if (cond.right_is_attr == 1 && 0 == strcmp(cond.right_attr.relation_name, rel_name) &&
+        0 == strcmp(cond.right_attr.attribute_name, meta->name())) {
+      ReplDesc desc{};
+      desc.attr_type = meta->type();
+      desc.attr_length = meta->len();
+      desc.attr_offset = meta->offset();
+      desc.leftOrRight = -1;
+      desc.condition_num = i;
+      maps[selects] = desc;
+      ans = true;
+    }
+  }
+  for (int i = 0; i < selects->subquery_num; i++) {
+    ans |= findNode(selects->subquery[i], rel_name, meta, maps);
+  }
+  return ans;
+}
+
 RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const char *db, Trx* trx,
-                                 Selects *subquery1, Selects *subquery2, int isRelated1, int isRelated2) {
+                                 Selects *subquery1, Selects *subquery2) {
   db_ = strdup(db);
   trx_ = trx;
   const TableMeta &table_meta = table.table_meta();
@@ -459,6 +495,15 @@ RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const
    * 如果没有关联就将 子查询的结果缓存到 Tuples 中 之后直接根据结果作 filter
    * 有关联的话 也是替换condition 的值 然后将 子查询结果存入 Tuples 中 进行 filter
    * */
+  // 遍历所有的 field 找出 在子查询中出现的
+  // 拿到 record 后填入进去
+  bool isRelated1 = false, isRelated2 = false;
+  for (int i = 0; i < table_meta.field_num(); i++) {
+    auto meta = table_meta.field(i);
+
+    isRelated1 |= findNode(subquery1, table_meta.name(), meta, maps_);
+    isRelated2 |= findNode(subquery2, table_meta.name(), meta, maps_);
+  }
 
   if (subquery1 && !isRelated1) {
     RC rc = ExecuteStage::createNode(db_, *subquery1, leftSets_, trx_);
@@ -489,67 +534,7 @@ RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const
       return RC::INVALID_ARGUMENT;
     }
   }
-  if (leftSelects_ && isRelated1) { // 根据 table 和 condition 里的条件 判断出 应该选择 record 中的 offset len type
-    for (int i = 0; i < leftSelects_->condition_num; i++) {
-      const Condition &cond = leftSelects_->conditions[i];
-      ReplDesc desc{};
-      if (cond.left_is_attr == 1 && 0 == strcmp(cond.left_attr.relation_name, table.name())) {
-        auto field = table_meta.field(cond.left_attr.attribute_name);
-        if (field == nullptr) {
-          return RC::INVALID_ARGUMENT;
-        }else {
-          desc.is_attr = true;
-          desc.attr_length = field->len();
-          desc.attr_offset = field->offset();
-          desc.leftOrRight = 1;
-          desc.attr_type = field->type();
-        }
-      }else if (cond.right_is_attr == 1 && 0 == strcmp(cond.right_attr.relation_name, table.name())) {
-        auto field = table_meta.field(cond.right_attr.attribute_name);
-        if (field == nullptr) {
-          return RC::INVALID_ARGUMENT;
-        }else {
-          desc.is_attr = true;
-          desc.attr_length = field->len();
-          desc.attr_offset = field->offset();
-          desc.leftOrRight = -1;
-          desc.attr_type = field->type();
-        }
-      }
-      leftReplDesc_.emplace_back(desc);
-    }
-  }
 
-  if (rightSelects_ && isRelated2) { // 根据 table 和 condition 里的条件 判断出 应该选择 record 中的 offset len type
-    for (int i = 0; i < rightSelects_->condition_num; i++) {
-      const Condition &cond = rightSelects_->conditions[i];
-      ReplDesc desc{};
-      if (cond.left_is_attr == 1 && 0 == strcmp(cond.left_attr.relation_name, table.name())) {
-        auto field = table_meta.field(cond.left_attr.attribute_name);
-        if (field == nullptr) {
-          return RC::INVALID_ARGUMENT;
-        }else {
-          desc.is_attr = true;
-          desc.attr_length = field->len();
-          desc.attr_offset = field->offset();
-          desc.leftOrRight = 1;
-          desc.attr_type = field->type();
-        }
-      }else if (cond.right_is_attr == 1 && 0 == strcmp(cond.right_attr.relation_name, table.name())) {
-        auto field = table_meta.field(cond.right_attr.attribute_name);
-        if (field == nullptr) {
-          return RC::INVALID_ARGUMENT;
-        }else {
-          desc.is_attr = true;
-          desc.attr_length = field->len();
-          desc.attr_offset = field->offset();
-          desc.leftOrRight = -1;
-          desc.attr_type = field->type();
-        }
-      }
-      rightReplDesc_.emplace_back(desc);
-    }
-  }
   if (subquery1) left_.is_attr = false;
   if (subquery2) right_.is_attr = false;
   comp_op_ = condition.comp;
@@ -693,42 +678,25 @@ bool SubqueryConditionFilter::filter(const Record &rec) const
   char *left_value = nullptr;
   char *right_value = nullptr;
 
-  if (leftSelects_) { // 有关联需要进行替换
-    for (int i = 0; i < leftReplDesc_.size(); i++) {
-      auto& desc = leftReplDesc_[i];
-      if (desc.is_attr) {
-        if (desc.leftOrRight == 1) {
-          leftSelects_->conditions[i].left_is_attr = 0;
-          leftSelects_->conditions[i].left_value.data = malloc(desc.attr_length);
-          memcpy(leftSelects_->conditions[i].left_value.data, rec.data+desc.attr_offset, desc.attr_length);
-          leftSelects_->conditions[i].left_value.type = desc.attr_type;
-        }else {
-          leftSelects_->conditions[i].right_is_attr = 0;
-          leftSelects_->conditions[i].right_value.data = malloc(desc.attr_length);
-          memcpy(leftSelects_->conditions[i].right_value.data, rec.data+desc.attr_offset, desc.attr_length);
-          leftSelects_->conditions[i].right_value.type = desc.attr_type;
-        }
-      }
+  for (auto& [s, desc] : maps_) {
+    if (desc.leftOrRight == 1) {
+      auto &cond = s->conditions[desc.condition_num];
+      cond.left_is_attr = 0;
+      cond.left_value.data = malloc(desc.attr_length);
+      memcpy(cond.left_value.data, rec.data + desc.attr_offset, desc.attr_length);
+      cond.left_value.type = desc.attr_type;
+    } else {
+      auto &cond = s->conditions[desc.condition_num];
+      cond.right_is_attr = 0;
+      cond.right_value.data = malloc(desc.attr_length);
+      memcpy(cond.right_value.data, rec.data + desc.attr_offset, desc.attr_length);
+      cond.right_value.type = desc.attr_type;
     }
+  }
+  if (leftSelects_) { // 有关联需要进行替换
     ExecuteStage::createNode(db_, *leftSelects_, leftSets_, trx_);
   }
   if (rightSelects_) {
-    for (int i = 0; i < rightReplDesc_.size(); i++) {
-      auto& desc = rightReplDesc_[i];
-      if (desc.is_attr) {
-        if (desc.leftOrRight == 1) {
-          rightSelects_->conditions[i].left_is_attr = 0;
-          rightSelects_->conditions[i].left_value.data = malloc(desc.attr_length);
-          memcpy(rightSelects_->conditions[i].left_value.data, rec.data+desc.attr_offset, desc.attr_length);
-          rightSelects_->conditions[i].left_value.type = desc.attr_type;
-        }else {
-          rightSelects_->conditions[i].right_is_attr = 0;
-          rightSelects_->conditions[i].right_value.data = malloc(desc.attr_length);
-          memcpy(rightSelects_->conditions[i].right_value.data, rec.data+desc.attr_offset, desc.attr_length);
-          rightSelects_->conditions[i].right_value.type = desc.attr_type;
-        }
-      }
-    }
     ExecuteStage::createNode(db_, *rightSelects_, rightSets_, trx_);
   }
 

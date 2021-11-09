@@ -36,7 +36,7 @@ struct ConDesc {
 };
 
 struct ReplDesc {
-  bool   is_attr;     // 是否属性，false 表示是值
+  int    condition_num;
   int    attr_length; // 如果是属性，表示属性值长度
   int    attr_offset; // 如果是属性，表示在记录中的偏移量
   int    leftOrRight; // 在子查询中 是替换左边还是右边 1：left -1: right
@@ -107,7 +107,7 @@ class SubqueryConditionFilter : public DefaultConditionFilter{
 //          const std::vector<Tuple>& leftTuples, const std::vector<Tuple>& rightTuples);
 
   RC init(Table &table, const Condition &condition, const char *db, Trx* trx,
-          Selects *subquery1, Selects *subquery2, int isRelated1, int isRelated2);
+          Selects *subquery1, Selects *subquery2);
 
   virtual bool filter(const Record &rec) const;
 
@@ -137,8 +137,7 @@ class SubqueryConditionFilter : public DefaultConditionFilter{
   // 用于关联子查询
   Selects *leftSelects_ = nullptr;
   Selects *rightSelects_ = nullptr;
-  std::vector<ReplDesc> leftReplDesc_;
-  std::vector<ReplDesc> rightReplDesc_;
+  std::unordered_map<Selects*, ReplDesc> maps_;
   AttrType attr_type_ = UNDEFINED;
   CompOp   comp_op_ = NO_OP;
 

@@ -255,37 +255,6 @@ static RC schema_add_field_agg(Table *table, const char *field_name, TupleSchema
   return RC::SUCCESS;
 }
 
-
-bool isRelIn(const char* rel, char* const * rels, int len) {
-  for (int i = 0; i < len; i++) {
-    if (0 == strcmp(rel, rels[i])) {
-      return true;
-    }
-  }
-  return false;
-}
-
-// sub condition 中 第 n 个 pair<int, int> first : parent , second : sub , {-1,-1} means no replace
-bool isRelatedQuery(const Selects &parent, const Selects &sub) {
-  for (int i = 0; i < sub.condition_num ; i++) {
-    const Condition &cond = sub.conditions[i];
-    if (cond.right_is_attr == 1 && cond.left_is_attr == 1) {
-      auto left_rel = cond.left_attr.relation_name;
-      auto right_rel = cond.right_attr.relation_name;
-
-      if (isRelIn(left_rel, parent.relations, parent.relation_num) &&
-          isRelIn(right_rel, sub.relations, sub.relation_num)) {
-        return true;
-      }
-      if (isRelIn(left_rel, sub.relations, sub.relation_num) &&
-           isRelIn(right_rel, parent.relations, parent.relation_num)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 // 把所有的表和只跟这张表关联的condition都拿出来，生成最底层的select 执行节点
 RC create_selection_executor(Trx *trx, const Selects &selects, const char *db, const char *table_name, SelectExeNode &select_node) {
   // 列出跟这张表关联的Attr
@@ -358,17 +327,13 @@ RC create_selection_executor(Trx *trx, const Selects &selects, const char *db, c
       Selects *ls = nullptr, *rs = nullptr;
       if (leftIdx != -1) {
         ls = selects.subquery[leftIdx];
-        if (isRelatedQuery(selects, *selects.subquery[leftIdx]))
-          isLeftRel = 1;
       }
       if (rightIdx != -1){
         rs = selects.subquery[rightIdx];
-        if(isRelatedQuery(selects, *selects.subquery[rightIdx]))
-          isRightRel = 1;
       }
 
       auto *condition_filter = new SubqueryConditionFilter();
-      rc = condition_filter->init(*table, condition, db, trx, ls, rs, isLeftRel, isRightRel);
+      rc = condition_filter->init(*table, condition, db, trx, ls, rs);
       if (rc != RC::SUCCESS) {
         LOG_INFO("create condition failed");
         for (DefaultConditionFilter * &filter : condition_filters) {
