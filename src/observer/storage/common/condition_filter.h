@@ -15,13 +15,17 @@ See the Mulan PSL v2 for more details. */
 #ifndef __OBSERVER_STORAGE_COMMON_CONDITION_FILTER_H_
 #define __OBSERVER_STORAGE_COMMON_CONDITION_FILTER_H_
 
-#include "rc.h"
-#include "sql/parser/parse.h"
-#include "sql/executor/tuple.h"
+#include <storage/trx/trx.h>
+
 #include <vector>
+
+#include "rc.h"
+#include "sql/executor/tuple.h"
+#include "sql/parser/parse.h"
 
 struct Record;
 class Table;
+class ExecutionNode;
 
 struct ConDesc {
   bool   is_attr;     // 是否属性，false 表示是值
@@ -29,6 +33,14 @@ struct ConDesc {
   int    attr_offset; // 如果是属性，表示在记录中的偏移量
   bool   is_null;     // 表示属性是否为空
   void * value;       // 如果是值类型，这里记录值的数据
+};
+
+struct ReplDesc {
+  bool   is_attr;     // 是否属性，false 表示是值
+  int    attr_length; // 如果是属性，表示属性值长度
+  int    attr_offset; // 如果是属性，表示在记录中的偏移量
+  int    leftOrRight; // 在子查询中 是替换左边还是右边 1：left -1: right
+  AttrType attr_type;
 };
 
 class ConditionFilter {
@@ -89,16 +101,17 @@ class SubqueryConditionFilter : public DefaultConditionFilter{
 
   RC init(const ConDesc &left, const std::vector<Tuple>& right, AttrType attr_type, CompOp comp_op);
   RC init(const std::vector<Tuple>& left, const ConDesc &right, AttrType attr_type, CompOp comp_op);
-  RC init(Table &table, const Condition &condition, const std::vector<Tuple>& tuples);
   RC init(const std::vector<Tuple>& left, const std::vector<Tuple>& right,
-                                   AttrType attr_type, CompOp comp_op);
+          AttrType attr_type, CompOp comp_op);
   RC init(Table &table, const Condition &condition,
           const std::vector<Tuple>& leftTuples, const std::vector<Tuple>& rightTuples);
+
+  RC init(Table &table, const Condition &condition, const char *db, Trx* trx,
+          Selects *subquery1, Selects *subquery2, int isRelated1, int isRelated2);
 
   virtual bool filter(const Record &rec) const;
 
   bool cmpTwoTupleSets() const;
-
 
  public:
   const ConDesc &left() const {
@@ -121,11 +134,19 @@ class SubqueryConditionFilter : public DefaultConditionFilter{
 
   ConDesc left_;
   ConDesc right_;
-
-  std::vector<Tuple> leftTuples_;
-  std::vector<Tuple> rightTuples_;
+  // 用于关联子查询
+  Selects *leftSelects_ = nullptr;
+  Selects *rightSelects_ = nullptr;
+  std::vector<ReplDesc> leftReplDesc_;
+  std::vector<ReplDesc> rightReplDesc_;
   AttrType attr_type_ = UNDEFINED;
   CompOp   comp_op_ = NO_OP;
+
+  mutable TupleSet leftSets_;
+  mutable TupleSet rightSets_;
+
+  char *db_ = nullptr;
+  Trx *trx_ = nullptr;
 };
 
 class CompositeConditionFilter : public ConditionFilter {

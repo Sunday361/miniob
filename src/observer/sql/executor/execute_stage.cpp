@@ -225,84 +225,6 @@ void end_trx_if_need(Session *session, Trx *trx, bool all_right) {
   }
 }
 
-bool getAttrRelationName(const Selects& selects, std::string& os) {
-  for (int i = selects.attr_num - 1; i >= 0; i--) {
-    if (0 == strcmp("*", selects.attributes[i].attribute_name)) {
-      return false;
-    }
-    if (nullptr != selects.attributes[i].relation_name) {
-      os += std::string(selects.attributes[i].relation_name) + ".";
-    }
-    os += std::string(selects.attributes[i].attribute_name);
-    if (i != 0) os += " | ";
-  }
-  os += "\n";
-  return true;
-}
-
-// 这里没有对输入的某些信息做合法性校验，比如查询的列名、where条件中的列名等，没有做必要的合法性校验
-// 需要补充上这一部分. 校验部分也可以放在resolve，不过跟execution放一起也没有关系
-//RC ExecuteStage::do_select(const char *db, Query *sql, SessionEvent *session_event) {
-//
-//  RC rc = RC::SUCCESS;
-//  Session *session = session_event->get_client()->session;
-//  Trx *trx = session->current_trx();
-//  const Selects &selects = sql->sstr.selection;
-//  // 把所有的表和只跟这张表关联的condition都拿出来，生成最底层的select 执行节点
-//  std::vector<SelectExeNode *> select_nodes;
-//  for (size_t i = 0; i < selects.relation_num; i++) {
-//    const char *table_name = selects.relations[i];
-//    SelectExeNode *select_node = new SelectExeNode;
-//    rc = create_selection_executor(trx, selects, db, table_name, *select_node);
-//    if (rc != RC::SUCCESS) {
-//      delete select_node;
-//      for (SelectExeNode *& tmp_node: select_nodes) {
-//        delete tmp_node;
-//      }
-//      end_trx_if_need(session, trx, false);
-//      session_event->set_response("FAILURE\n");
-//      return rc;
-//    }
-//    select_nodes.push_back(select_node);
-//  }
-//
-//  if (select_nodes.empty()) {
-//    LOG_ERROR("No table given");
-//    end_trx_if_need(session, trx, false);
-//    return RC::SQL_SYNTAX;
-//  }
-//
-//  std::vector<TupleSet> tuple_sets;
-//  for (SelectExeNode *&node: select_nodes) {
-//    TupleSet tuple_set;
-//    rc = node->execute(tuple_set);
-//    if (rc != RC::SUCCESS) {
-//      for (SelectExeNode *& tmp_node: select_nodes) {
-//        delete tmp_node;
-//      }
-//      end_trx_if_need(session, trx, false);
-//      return rc;
-//    } else {
-//      tuple_sets.push_back(std::move(tuple_set));
-//    }
-//  }
-//
-//  std::stringstream ss;
-//  if (tuple_sets.size() > 1) {
-//    // 本次查询了多张表，需要做join操作
-//  } else {
-//    // 当前只查询一张表，直接返回结果即可
-//    tuple_sets.front().print(ss);
-//  }
-//
-//  for (SelectExeNode *& tmp_node: select_nodes) {
-//    delete tmp_node;
-//  }
-//  session_event->set_response(ss.str());
-//  end_trx_if_need(session, trx, true);
-//  return rc;
-// }
-
 bool match_table(const Selects &selects, const char *table_name_in_condition, const char *table_name_to_match) {
   if (table_name_in_condition != nullptr) {
     return 0 == strcmp(table_name_in_condition, table_name_to_match);
@@ -331,6 +253,37 @@ static RC schema_add_field_agg(Table *table, const char *field_name, TupleSchema
 
   schema.add(field_meta->type(), table->name(), field_meta->name());
   return RC::SUCCESS;
+}
+
+
+bool isRelIn(const char* rel, char* const * rels, int len) {
+  for (int i = 0; i < len; i++) {
+    if (0 == strcmp(rel, rels[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// sub condition 中 第 n 个 pair<int, int> first : parent , second : sub , {-1,-1} means no replace
+bool isRelatedQuery(const Selects &parent, const Selects &sub) {
+  for (int i = 0; i < sub.condition_num ; i++) {
+    const Condition &cond = sub.conditions[i];
+    if (cond.right_is_attr == 1 && cond.left_is_attr == 1) {
+      auto left_rel = cond.left_attr.relation_name;
+      auto right_rel = cond.right_attr.relation_name;
+
+      if (isRelIn(left_rel, parent.relations, parent.relation_num) &&
+          isRelIn(right_rel, sub.relations, sub.relation_num)) {
+        return true;
+      }
+      if (isRelIn(left_rel, sub.relations, sub.relation_num) &&
+           isRelIn(right_rel, parent.relations, parent.relation_num)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 // 把所有的表和只跟这张表关联的condition都拿出来，生成最底层的select 执行节点
@@ -397,31 +350,26 @@ RC create_selection_executor(Trx *trx, const Selects &selects, const char *db, c
       }
     }
 
-    if (condition.right_is_attr >= 2 || condition.left_is_attr >= 2) {
+    if (condition.right_is_attr >= 2 || condition.left_is_attr >= 2) { // 处理子查询
       TupleSet leftSubsets, rightSubsets;
       RC rc = RC::SUCCESS;
       int leftIdx = condition.left_is_attr >= 2 ? condition.left_is_attr - 2 : -1;
       int rightIdx = condition.right_is_attr >= 2 ? condition.right_is_attr - 2 : -1;
-      if (leftIdx != -1)
-        rc = ExecuteStage::createNode(db, *selects.subquery[leftIdx], leftSubsets, trx);
-      if (rc != RC::SUCCESS) {
-        LOG_INFO("create condition failed");
-        for (DefaultConditionFilter * &filter : condition_filters) {
-          delete filter;
-        }
-        return rc;
+      int isLeftRel = 0, isRightRel = 0;
+      Selects *ls = nullptr, *rs = nullptr;
+      if (leftIdx != -1) {
+        ls = selects.subquery[leftIdx];
+        if (isRelatedQuery(selects, *selects.subquery[leftIdx]))
+          isLeftRel = 1;
       }
-      if (rightIdx != -1)
-        rc = ExecuteStage::createNode(db, *selects.subquery[rightIdx], rightSubsets, trx);
-      if (rc != RC::SUCCESS) {
-        LOG_INFO("create condition failed");
-        for (DefaultConditionFilter * &filter : condition_filters) {
-          delete filter;
-        }
-        return rc;
+      if (rightIdx != -1){
+        rs = selects.subquery[rightIdx];
+        if(isRelatedQuery(selects, *selects.subquery[rightIdx]))
+          isRightRel = 1;
       }
+
       auto *condition_filter = new SubqueryConditionFilter();
-      rc = condition_filter->init(*table, condition, leftSubsets.tuples(), rightSubsets.tuples());
+      rc = condition_filter->init(*table, condition, db, trx, ls, rs, isLeftRel, isRightRel);
       if (rc != RC::SUCCESS) {
         LOG_INFO("create condition failed");
         for (DefaultConditionFilter * &filter : condition_filters) {
@@ -514,8 +462,9 @@ std::string getOutputHead(const Selects &selects) {
   os << "\n";
   return os.str();
 }
-
-// 创建执行节点 并返回对应的执行结果 以tupleSet的形式返回结果
+// 创建执行节点 随后调用 node->execute(TupleSet)  接受参数
+// 由上层查询决定是否需要进行优化
+// 如果子查询有关联字段 则在父亲查询的时候 filter时对node进行初始化
 RC ExecuteStage::createNode(const char *db, const Selects& selects, TupleSet& SetAns, Trx *trx) {
   RC rc = RC::SUCCESS;
   // validation aggregation and group by
@@ -903,6 +852,7 @@ RC ExecuteStage::select(const char *db, Query *sql, SessionEvent *session_event)
   end_trx_if_need(session, trx, true);
   return rc;
 }
+
 
 
 
