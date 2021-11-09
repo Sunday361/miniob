@@ -383,10 +383,10 @@ RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const
     }
     left_.attr_length = field_left->len();
     left_.attr_offset = field_left->offset();
-
     left_.value = nullptr;
     left_.is_null = false;
     type_left = field_left->type();
+    attr_type_ = type_left;
   } else if (0 == condition.left_is_attr){
     left_.is_attr = false;
     left_.value = condition.left_value.data;  // 校验type 或者转换类型
@@ -394,6 +394,7 @@ RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const
     left_.is_null = (type_left == NULLTYPE);
     left_.attr_length = 0;
     left_.attr_offset = 0;
+    attr_type_ = type_left;
   }
 
   if (1 == condition.right_is_attr) {
@@ -416,6 +417,7 @@ RC SubqueryConditionFilter::init(Table &table, const Condition &condition, const
     right_.is_null = (type_right == NULLTYPE);
     right_.attr_length = 0;
     right_.attr_offset = 0;
+    attr_type_ = type_right;
   }
 
   /**

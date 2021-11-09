@@ -351,7 +351,6 @@ RC create_selection_executor(Trx *trx, const Selects &selects, const char *db, c
     }
 
     if (condition.right_is_attr >= 2 || condition.left_is_attr >= 2) { // 处理子查询
-      TupleSet leftSubsets, rightSubsets;
       RC rc = RC::SUCCESS;
       int leftIdx = condition.left_is_attr >= 2 ? condition.left_is_attr - 2 : -1;
       int rightIdx = condition.right_is_attr >= 2 ? condition.right_is_attr - 2 : -1;
