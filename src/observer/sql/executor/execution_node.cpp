@@ -411,6 +411,7 @@ RC OrderExeNode::execute(TupleSet &tuple_set) {
         }
       }
     }
+
     return false;
   });
   TupleSchema s = tuple_set.schema();
