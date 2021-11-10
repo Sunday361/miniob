@@ -488,12 +488,12 @@ RelAttr attr;
 }
 
 order_list:
-| COMMA ID order_asc {
+| COMMA ID order_asc order_list {
 RelAttr attr;
 relation_attr_init(&attr, NULL, $2, $3);
 selects_append_orderbys(&CONTEXT->ssql->sstr.selection, &attr);
 }
-| COMMA ID DOT ID order_asc {
+| COMMA ID DOT ID order_asc order_list {
 RelAttr attr;
 relation_attr_init(&attr, $2, $4, $5);
 selects_append_orderbys(&CONTEXT->ssql->sstr.selection, &attr);
