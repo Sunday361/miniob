@@ -130,4 +130,23 @@ class JoinExeNode : public ExecutionNode {
   std::vector<ExecutionNode*> childNodes_;
 };
 
+class OrderExeNode : public ExecutionNode {
+ public:
+  OrderExeNode();
+  virtual ~OrderExeNode();
+
+  RC init(Trx *trx, ExecutionNode* childNodes, TupleSchema &&orderSchema, std::vector<int>& orders);
+
+  RC execute(TupleSet &tuple_set) override;
+
+  void setOutputSchema(TupleSchema&& tuple_schema){ }
+  TupleSchema& getOutputSchema() {return orderSchema_;}
+
+ private:
+  Trx *trx_ = nullptr;
+  TupleSchema orderSchema_;
+  ExecutionNode* childNodes_ = nullptr;
+  std::vector<int> orders_;
+};
+
 #endif //__OBSERVER_SQL_EXECUTOR_EXECUTION_NODE_H_

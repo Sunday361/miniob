@@ -15,7 +15,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/executor/execution_node.h"
 
 #include <sstream>
-
+#include <algorithm>
 #include "common/log/log.h"
 #include "storage/common/table.h"
 
@@ -55,7 +55,7 @@ RC SelectExeNode::execute(TupleSet &tuple_set) {
 }
 
 AggregateExeNode::~AggregateExeNode() noexcept {
-
+  delete childNode_;
 }
 
 RC AggregateExeNode::init(Trx *trx, TupleSchema &tupleSchema, TupleSchema &group,
@@ -253,7 +253,11 @@ RC AggregateExeNode::execute(TupleSet &outputSet) {
 
 JoinExeNode::JoinExeNode() {}
 
-JoinExeNode::~JoinExeNode() noexcept {}
+JoinExeNode::~JoinExeNode() noexcept {
+  for (auto& childNode : childNodes_) {
+    delete childNode;
+  }
+}
 
 RC JoinExeNode::init(Trx *trx, std::vector<ExecutionNode*>&& childNodes,
         std::vector<Condition> &&conditions) {
@@ -364,6 +368,59 @@ bool JoinExeNode::cmp(std::vector<int>& idx_left, std::vector<int>& idx_right,
     }
   }
   return ans;
+}
+
+OrderExeNode::OrderExeNode() {}
+
+OrderExeNode::~OrderExeNode() noexcept {
+  delete childNodes_;
+}
+
+RC OrderExeNode::init(Trx *trx, ExecutionNode* childNodes,
+                      TupleSchema &&orderSchema, std::vector<int>& orders) {
+  trx_ = trx;
+  childNodes_ = childNodes;
+  orderSchema_ = orderSchema;
+  orders_ = orders;
+  return RC::SUCCESS;
+}
+
+RC OrderExeNode::execute(TupleSet &tuple_set) {
+  tuple_set.clear();
+  childNodes_->execute(tuple_set);
+
+  std::vector<std::pair<int, int>> orders;
+
+  for (int i = 0; i < orderSchema_.fields().size(); i++) {
+    for (int j = 0; j < tuple_set.schema().fields().size(); j++) {
+      if (orderSchema_.field(i).to_string() == tuple_set.schema().field(j).to_string()) {
+        orders.emplace_back(std::make_pair(j, orders_[i]));
+      }
+    }
+  }
+
+  std::vector<Tuple> childTuples = tuple_set.tuples();
+  std::sort(childTuples.begin(), childTuples.end(), [&](const Tuple& t1, const Tuple& t2) {
+    for (auto& o : orders) {
+      int cmp = t1.get(o.first).compare(t2.get(o.first));
+      if (cmp != 0) {
+        if (o.second == MAX_AGG) { // desc
+          return cmp > 0;
+        }else if (o.second == MIN_AGG) {
+          return cmp < 0;
+        }
+      }
+    }
+    return false;
+  });
+  TupleSchema s = tuple_set.schema();
+  tuple_set.clear();
+
+  for (auto& t : childTuples) {
+    tuple_set.add(std::move(t));
+  }
+  tuple_set.set_schema(s);
+  return RC::SUCCESS;
 }
 
 

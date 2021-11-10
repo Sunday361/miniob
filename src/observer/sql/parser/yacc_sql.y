@@ -141,6 +141,7 @@ return (ParserContext*)(&(v->contexts[l-1]));
         TEXT_T
         OP_IN
         OP_NOTIN
+        ASC
 
 %union {
   struct _Attr *attr;
@@ -168,6 +169,8 @@ return (ParserContext*)(&(v->contexts[l-1]));
 %type <value1> value;
 %type <number> number;
 %type <number> unique;
+%type <number> order_asc;
+
 %%
 
 commands:		//commands or sqls. parser starts here.
@@ -473,8 +476,38 @@ order:
 {
 
 }
-| ORDER_BY{
+| ORDER_BY ID order_asc order_list{
+RelAttr attr;
+            			relation_attr_init(&attr, NULL, $2, $3);
+            			selects_append_orderbys(&CONTEXT->ssql->sstr.selection, &attr);
+}
+| ORDER_BY ID DOT ID order_asc order_list{
+	RelAttr attr;
+        relation_attr_init(&attr, $2, $4, $5);
+        selects_append_orderbys(&CONTEXT->ssql->sstr.selection, &attr);
+}
 
+order_list:
+| COMMA ID order_asc {
+RelAttr attr;
+relation_attr_init(&attr, NULL, $2, $3);
+selects_append_orderbys(&CONTEXT->ssql->sstr.selection, &attr);
+}
+| COMMA ID DOT ID order_asc {
+RelAttr attr;
+relation_attr_init(&attr, $2, $4, $5);
+selects_append_orderbys(&CONTEXT->ssql->sstr.selection, &attr);
+}
+
+order_asc:
+{
+$$=MIN_AGG;
+}
+| ASC {
+$$=MIN_AGG;
+}
+| DESC {
+$$=MAX_AGG;
 }
 
 select_attr:

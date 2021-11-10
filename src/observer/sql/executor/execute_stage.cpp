@@ -738,17 +738,48 @@ RC ExecuteStage::select(const char *db, Query *sql, SessionEvent *session_event)
 
     node = n;
   }
-  LOG_INFO("init ok");
   // order by
-  {
-   // Todo: order by
+  if (selects.orderby_num > 0) {
+    TupleSchema orderSchema;
+    std::vector<int> orders;
+    for (int i = selects.orderby_num - 1; i >= 0; i--) {
+      auto& order_attr = selects.orderbys[i];
+      const Table *table;
+      if (order_attr.relation_name == nullptr && selects.relation_num != 1) {
+        session_event->set_response("FAILURE\n");
+        return RC::SQL_SYNTAX;
+      }
+      if (order_attr.relation_name == nullptr) {
+        table = DefaultHandler::get_default().find_table(db, selects.relations[0]);
+      }else {
+        table = DefaultHandler::get_default().find_table(db, order_attr.relation_name);
+      }
+
+      auto meta = table->table_meta().field(order_attr.attribute_name);
+
+      if (!meta) {
+        session_event->set_response("FAILURE\n");
+        return RC::SCHEMA_FIELD_NOT_EXIST;
+      }
+
+      orderSchema.add(meta->type(), table->name(), meta->name());
+      orders.emplace_back(order_attr.aggType);
+    }
+
+    OrderExeNode* n = new OrderExeNode();
+
+    n->init(trx, node, std::move(orderSchema), orders);
+
+    node = n;
   }
+  LOG_INFO("init ok");
   TupleSet sets;
   rc = node->execute(sets);
   if (rc != RC::SUCCESS) {
     session_event->set_response("FAILURE\n");
     return rc;
   }
+  delete node;
   LOG_INFO("execute over");
   std::stringstream ss;
   TupleSet outputs;

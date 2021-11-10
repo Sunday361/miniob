@@ -84,7 +84,7 @@ typedef struct _Selects {
   size_t    groupby_num;          // Length of attrs in Group clause
   RelAttr   groupbys[MAX_NUM];    // attrs in Group clause
   size_t    orderby_num;          // Length of attrs in Group clause
-  RelAttr   orderbys[MAX_NUM];    // attrs in Group clause
+  RelAttr   orderbys[MAX_NUM];    // attrs in Order clause using attr.aggtype as asc(desc) min_agg : asc , max_agg desc
   size_t    subquery_num;
   struct _Selects* subquery[MAX_NUM];
 } Selects;
@@ -222,6 +222,7 @@ void attr_info_destroy(AttrInfo *attr_info);
 void selects_init(Selects *selects, ...);
 void selects_append_attribute(Selects *selects, RelAttr *rel_attr);
 void selects_append_groupbys(Selects *selects, RelAttr *rel_attr);
+void selects_append_orderbys(Selects *selects, RelAttr *rel_attr);
 void selects_append_relation(Selects *selects, const char *relation_name);
 void selects_append_conditions(Selects *selects, Condition conditions[], size_t condition_num);
 void selects_append_selects(Selects *selects, Selects* sub);
