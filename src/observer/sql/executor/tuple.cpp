@@ -30,6 +30,16 @@ Tuple::Tuple(const Tuple &other) {
 Tuple::Tuple(Tuple &&other) noexcept : values_(std::move(other.values_)) {
 }
 
+Tuple & Tuple::operator=(const Tuple &other) noexcept{
+  if (&other == this) {
+    return *this;
+  }
+
+  values_.clear();
+  values_ = other.values_;
+  return *this;
+}
+
 Tuple & Tuple::operator=(Tuple &&other) noexcept {
   if (&other == this) {
     return *this;

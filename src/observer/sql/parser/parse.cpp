@@ -151,7 +151,9 @@ void selects_append_attribute(Selects *selects, RelAttr *rel_attr) {
 void selects_append_groupbys(Selects *selects, RelAttr *rel_attr) {
   selects->groupbys[selects->groupby_num++] = *rel_attr;
 }
-
+void selects_append_orderbys(Selects *selects, RelAttr *rel_attr) {
+  selects->orderbys[selects->orderby_num++] = *rel_attr;
+}
 void selects_append_relation(Selects *selects, const char *relation_name) {
   selects->relations[selects->relation_num++] = strdup(relation_name);
 }
