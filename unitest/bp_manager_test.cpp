@@ -15,44 +15,101 @@ See the Mulan PSL v2 for more details. */
 #include "storage/default/disk_buffer_pool.h"
 #include "gtest/gtest.h"
 
+const int KeyLength = 1024;
+const int BUFFER_SIZE = 10;
+void generateBuffer(char *buffer, char key) {
+  for (int i = 0; i < KeyLength - 1; i++) {
+    buffer[i] = key;
+  }
+  buffer[KeyLength - 1] = 0;
+}
+
 TEST(test_bp_manager, test_bp_manager_simple_lru) {
-  BPManager bp_manager(2);
+  int POOLSIZE = 10;
+  LruBPManager bp_manager(POOLSIZE);
 
-  Frame * frame1 = bp_manager.alloc();
-  ASSERT_NE(frame1, nullptr);
+  for (int i = 0; i < POOLSIZE; i++) {
+    bp_manager.unpin(i);
+    ASSERT_EQ(bp_manager.size(), i + 1);
+  }
 
-  frame1->file_desc = 0;
-  frame1->page.page_num = 1;
+  for (int i = 0; i < POOLSIZE / 2; i++) {
+    long pageID = -1;
+    bp_manager.victim(&pageID);
+    ASSERT_EQ(pageID, i);
+  }
 
-  ASSERT_EQ(frame1, bp_manager.get(0, 1));
+  for (int i = POOLSIZE / 2; i < POOLSIZE; i++) {
+    bp_manager.pin(i);
+  }
+  ASSERT_EQ(bp_manager.size(), 0);
 
-  Frame *frame2 = bp_manager.alloc();
-  ASSERT_NE(frame2, nullptr);
-  frame2->file_desc = 0;
-  frame2->page.page_num = 2;
+  long pageID = -1;
+  ASSERT_EQ(bp_manager.victim(&pageID), false);
+  ASSERT_EQ(pageID, -1);
 
-  ASSERT_EQ(frame1, bp_manager.get(0, 1));
 
-  Frame *frame3 = bp_manager.alloc();
-  ASSERT_NE(frame3, nullptr);
-  frame3->file_desc = 0;
-  frame3->page.page_num = 3;
+  for (int i = 0; i < POOLSIZE; i++) {
+    bp_manager.unpin(i);
+    ASSERT_EQ(bp_manager.size(), i + 1);
+  }
 
-  frame2 = bp_manager.get(0, 2);
-  ASSERT_EQ(frame2, nullptr);
+  bp_manager.unpin(POOLSIZE);
+  ASSERT_EQ(bp_manager.victim(&pageID), true);
+  ASSERT_EQ(pageID, 0);
+}
 
-  Frame *frame4 = bp_manager.alloc();
-  frame4->file_desc = 0;
-  frame4->page.page_num = 4;
+TEST(test_bp_manager, test_lru_disk_buffer_Pool) {
+  LruDiskBufferPool* diskBufferPool = theGlobalLruDiskBufferPool(BUFFER_SIZE);
 
-  frame1 = bp_manager.get(0, 1);
-  ASSERT_EQ(frame1, nullptr);
+  const char* file_name1 = "test1";
+  const char* file_name2 = "test2";
 
-  frame3 = bp_manager.get(0, 3);
-  ASSERT_NE(frame3, nullptr);
+  int file_id1 = -1, file_id2 = -1;
+  PageNum pageNum = -1;
+  BPPageHandle writePageHandle;
+  BPPageHandle readPageHandle;
+  diskBufferPool->create_file(file_name1);
 
-  frame4 = bp_manager.get(0, 4);
-  ASSERT_NE(frame4, nullptr);
+  diskBufferPool->open_file(file_name1, &file_id1);
+
+  ASSERT_NE(file_id1, -1);
+
+  char *buffer = new char[KeyLength];
+  std::vector<int> pageNums;
+  for (int i = 1; i <= BUFFER_SIZE + 1; i++) { // 申请 11 页 超出 lru 的范围
+    diskBufferPool->allocate_page(file_id1, &writePageHandle);
+
+    generateBuffer(buffer, i);
+    char* pos;
+    diskBufferPool->get_data(&writePageHandle, &pos);
+
+    memcpy(pos, buffer, KeyLength);
+
+    diskBufferPool->mark_dirty(&writePageHandle);
+    diskBufferPool->unpin_page(&writePageHandle);
+
+    pageNum = writePageHandle.frame->page.page_num;
+    pageNums.emplace_back(pageNum);
+
+    diskBufferPool->flush_all_pages(file_id1);
+  }
+  // write complete
+
+  for (int i = 0; i <= BUFFER_SIZE; i++) { // 申请 11 页 超出 lru 的范围
+    diskBufferPool->get_this_page(file_id1, pageNums[i], &readPageHandle);
+
+    generateBuffer(buffer, i + 1);
+    char* pos;
+    diskBufferPool->get_data(&readPageHandle, &pos);
+
+    pageNum = readPageHandle.frame->page.page_num;
+    ASSERT_EQ(pageNum, pageNums[i]);
+
+    ASSERT_EQ(0, strcmp(pos, buffer));
+
+    diskBufferPool->unpin_page(&readPageHandle);
+  }
 }
 
 int main(int argc, char **argv) {
